@@ -5,7 +5,7 @@ faz o tratamento das vendas, ADS, afiliados, visitas, pacote final, forecast e o
 
 ## Partes
 - `sistema/` — o código (Python + `painel.html`).
-- `render.yaml` — sistema online no Render (Starter + disco de 10 GB em `/var/data`).
+- `render.yaml` — sistema online no Render (1 CPU / 2 GB + disco de 10 GB em `/var/data`).
 
 ## Online
 - Variáveis: `RV_NUVEM=1`, `RELATORIOS_SISTEMA` e `RELATORIOS_RAIZ` (no disco), `ADMIN_USUARIO`, `ADMIN_SENHA`, `TZ`.

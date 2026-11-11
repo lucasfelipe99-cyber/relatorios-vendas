@@ -1962,7 +1962,7 @@ def dias_esperados(ano, mes, hoje=None):
 
 _SEM = object()                  # "coluna ausente nesta linha" (para devolver o dicionário igual ao lido)
 _CACHE_PADRAO = {}               # (arquivo, tipo) -> (mtime_ns, tamanho, cabeçalho, linhas já convertidas)
-_CACHE_MAX_LINHAS = 300000
+_CACHE_MAX_LINHAS = 1000000
 _TRAVA_PADRAO = threading.Lock()
 
 

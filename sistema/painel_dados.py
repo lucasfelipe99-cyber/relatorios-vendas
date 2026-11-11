@@ -31,7 +31,7 @@ _TRAVA = threading.Lock()
 
 _LEITURA = threading.Lock()        # um consolidado lido por vez: ler o .xlsx é o que mais usa memória
 _MAX_CACHE = 60
-_GRANDE = 2 * 1024 * 1024           # acima disso o .xlsx é lido em fluxo
+_GRANDE = 10 * 1024 * 1024          # acima disso o .xlsx é lido em fluxo (plano de 2 GB)
 _PASTA_CACHE = os.path.join(comum.PASTA_SISTEMA, "dados", "cache_painel")
 _VERSAO_CACHE = 1
 

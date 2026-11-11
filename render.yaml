@@ -1,10 +1,9 @@
 # Sistema online (Render): painel, uploads, tratamento, ADS/afiliados/visitas e pacote final.
-# Os downloads continuam nos computadores (estações), que enviam os relatórios para cá.
 services:
   - type: web
     name: relatorios-vendas
     runtime: python
-    plan: starter
+    plan: standard        # 1 CPU, 2 GB de memória (planilhas e pacotes grandes)
     region: virginia
     branch: main
     buildCommand: pip install -r requirements.txt
