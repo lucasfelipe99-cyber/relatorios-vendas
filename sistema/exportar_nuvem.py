@@ -85,6 +85,8 @@ def main():
     ap.add_argument("--usuario", default="admin")
     ap.add_argument("--senha", default="")
     ap.add_argument("--estacao", default=(socket.gethostname() or "").split(".")[0])
+    ap.add_argument("--ligar-estacao", action="store_true",
+                    help="depois de enviar, este computador passa a ser estação do sistema online (baixa e envia para lá)")
     a = ap.parse_args()
     sistema = os.path.abspath(a.sistema)
     with open(os.path.join(sistema, "config.json"), "r", encoding="utf-8") as f:
@@ -101,6 +103,21 @@ def main():
         if not a.senha:
             raise SystemExit("Informe --senha (a senha do admin do sistema online).")
         print(enviar(destino, a.url, a.usuario, a.senha, a.estacao))
+        if a.ligar_estacao:
+            arq = os.path.join(sistema, "dados", "rede.json")
+            try:
+                with open(arq, "r", encoding="utf-8") as f:
+                    rede = json.load(f)
+            except (OSError, ValueError):
+                rede = {}
+            if os.path.isfile(arq):
+                import shutil
+                shutil.copy2(arq, arq + ".antes_online")
+            rede.update(papel="estacao", servidor=a.url.rstrip("/"), senha=a.senha, nome=a.estacao, principal="1")
+            rede.setdefault("usuario", "")
+            with open(arq, "w", encoding="utf-8") as f:
+                json.dump(rede, f, ensure_ascii=False, indent=1)
+            print("Este computador agora é estação de %s (rede.json; o anterior ficou em rede.json.antes_online)." % a.url)
 
 
 if __name__ == "__main__":
