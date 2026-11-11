@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+sistema/dados/
+sistema/logs/
+sistema/backups/
+sistema/.venv/
+sistema/app/
+sistema/python.txt
+sistema/rede.json
+*.zip

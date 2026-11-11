@@ -1,0 +1,6 @@
+# Dependências do sistema online (Render). No Windows o instalador (instalar.ps1) instala as suas.
+pandas==3.0.5
+numpy==2.5.3
+openpyxl==3.1.5
+python-calamine==0.9.0
+xlsxwriter==3.2.9

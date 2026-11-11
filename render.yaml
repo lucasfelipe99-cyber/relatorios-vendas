@@ -1,0 +1,32 @@
+# Sistema online (Render): painel, uploads, tratamento, ADS/afiliados/visitas e pacote final.
+# Os downloads continuam nos computadores (estações), que enviam os relatórios para cá.
+services:
+  - type: web
+    name: relatorios-vendas
+    runtime: python
+    plan: starter
+    region: virginia
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd sistema && python -u servidor.py
+    healthCheckPath: /saude
+    autoDeploy: true
+    disk:
+      name: dados
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: RV_NUVEM
+        value: "1"
+      - key: RELATORIOS_SISTEMA
+        value: /var/data/sistema
+      - key: RELATORIOS_RAIZ
+        value: /var/data/Relatorios
+      - key: TZ
+        value: America/Sao_Paulo
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: ADMIN_USUARIO
+        value: admin
+      - key: ADMIN_SENHA
+        sync: false

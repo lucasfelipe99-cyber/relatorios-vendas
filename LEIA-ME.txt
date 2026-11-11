@@ -1,0 +1,32 @@
+﻿APP RELATÓRIOS DE VENDAS
+========================
+
+1. Extraia este .zip em qualquer pasta (ex.: Downloads).
+2. Dê dois cliques em INSTALAR.bat (precisa de internet; leva alguns minutos).
+   - Cria C:\Relatórios e C:\Relatórios\_entrada
+   - Instala o sistema em C:\Relatórios\_sistema
+   - Instala o Python 3.12 se ainda não houver (pede confirmação)
+   - Monta o app PainelRelatorios.exe (com Python embutido)
+   - Registra 3 tarefas no Agendador do Windows (App, Abrir Chrome, Organizador)
+   - Cria o atalho "Relatórios de Vendas" na área de trabalho e no menu Iniciar
+3. O app abre em janela própria e fica no ícone perto do relógio.
+   Fechar a janela só esconde; para encerrar, botão direito no ícone > Sair.
+4. Siga a aba "Ajuda" do app para o teste com 1 cliente e 1 marketplace.
+
+Se o Windows mostrar "O Windows protegeu o computador": Mais informações > Executar assim mesmo.
+Rodar o INSTALAR.bat de novo atualiza o app e mantém seus clientes (config.json).
+Para desligar os agendamentos: C:\Relatórios\_sistema\remover_agendamentos.ps1
+(botão direito > Executar com o PowerShell). Nenhum arquivo é apagado.
+
+USAR EM DOIS COMPUTADORES (mesma rede Wi-Fi)
+--------------------------------------------
+Instale o app nos dois. Depois, em "Horários e ajustes > Usar em mais de um computador":
+ - No computador PRINCIPAL (onde ficam os dados): escolha "Principal", defina uma senha,
+   salve, clique em "Liberar no firewall do Windows" e feche/abra o app.
+ - No outro (ESTAÇÃO): escolha "Estação", digite o endereço mostrado no principal
+   (ex.: 192.168.0.10) e a mesma senha, "Testar conexão", salve e feche/abra o app.
+ - Em "Clientes", em cada conta automática, escolha em qual computador ela baixa.
+O principal precisa estar ligado com o app aberto. Os relatórios baixados na estação
+vão sozinhos para o principal.
+Em cada computador, preencha "Seu nome": ele aparece para a equipe em "Equipe agora"
+(quem está fazendo o quê) e em "Atividade da equipe" (Painel geral).
