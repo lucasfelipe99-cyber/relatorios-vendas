@@ -558,7 +558,10 @@ _TRAVA_GERAR = __import__("threading").RLock()
 def gerar(cfg, cliente, ano=None, mes=None, hoje=None, origem="manual"):
     """Um pacote de cada vez (vários computadores/telas podem pedir ao mesmo tempo)."""
     with _TRAVA_GERAR:
-        return _gerar(cfg, cliente, ano, mes, hoje, origem)
+        try:
+            return _gerar(cfg, cliente, ano, mes, hoje, origem)
+        finally:
+            comum.devolver_memoria()
 
 
 def _gerar(cfg, cliente, ano=None, mes=None, hoje=None, origem="manual"):

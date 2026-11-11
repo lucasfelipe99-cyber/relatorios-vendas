@@ -14,7 +14,6 @@ import json
 import os
 import re
 import shutil
-import sys
 import time
 import zipfile
 
@@ -338,19 +337,10 @@ def _tratar_depois(cfg, cliente, mk_id, hoje):
 
 
 def pastas_entrada(cfg, cliente):
-    """_entrada\\Cliente\\Conta. Se o cliente tem uma conta só, arquivos soltos em _entrada\\Cliente
-    (pasta de downloads antiga) também valem para ela."""
+    """_entrada\\Cliente\\Conta. Se o cliente tem uma conta só, arquivos soltos em _entrada\\Cliente também valem para ela."""
     pastas = [comum.pasta_entrada(cfg, comum.pasta_de(cliente))]
-    if cliente.get("cliente_nome"):
-        raiz_cliente = comum.pasta_entrada(cfg, cliente["cliente_nome"])
-        ainda_baixa_la = False
-        if not cliente.get("unica_conta") and cliente.get("perfil"):
-            try:
-                ainda_baixa_la = comum.mesma_pasta(comum.pasta_downloads_perfil(cfg, cliente["perfil"]).get("pasta"), raiz_cliente)
-            except Exception:
-                pass
-        if cliente.get("unica_conta") or ainda_baixa_la:
-            pastas.append(raiz_cliente)
+    if cliente.get("cliente_nome") and cliente.get("unica_conta"):
+        pastas.append(comum.pasta_entrada(cfg, cliente["cliente_nome"]))
     return pastas
 
 

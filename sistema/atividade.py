@@ -27,7 +27,7 @@ TTL_ACAO = 30 * 60
 
 ABAS = {"status": "Painel geral", "vendas": "Vendas", "tratamento": "Tratamento", "ads": "ADS", "afiliados": "Afiliados",
         "pacote": "Pacote final", "meses": "Mês a mês", "forecast": "Forecast", "planilhas": "Planilhas", "clientes": "Clientes",
-        "perfis": "Perfis e downloads", "atalhos": "Links e atalhos", "custos": "Custos e imposto", "ajustes": "Horários e ajustes",
+        "visitas": "Visita & Conversão", "traducao": "Tradução de SKU", "custos": "Custos e imposto", "usuarios": "Usuários",
         "ajuda": "Ajuda"}
 
 
@@ -91,10 +91,7 @@ def descrever(caminho, dados, cfg):
         "/api/cliente/remover": ("removendo cliente", "cadastro|%s" % dados.get("id"), True),
         "/api/consolidado/gerar": ("gerando pacote final", "pacote|%s" % cid, True),
         "/api/forecast/definir": ("definindo forecast", "forecast|%s" % cid, False),
-        "/api/ajustes": ("alterando horários e ajustes", "ajustes", True),
         "/api/organizar": ("rodando o organizador", "organizar", True),
-        "/api/executar": ("pediu para baixar relatórios", None, False),
-        "/api/executar/parar": ("parou o download", None, False),
     }
     F = {
         "/api/lancamento/subir": "subiu " + nome_tipo + camp,
@@ -119,18 +116,13 @@ def descrever(caminho, dados, cfg):
         "/api/cliente/remover": "removeu cliente",
         "/api/consolidado/gerar": "gerou o pacote final",
         "/api/forecast/definir": "definiu o forecast",
-        "/api/ajustes": "alterou horários e ajustes",
         "/api/organizar": "rodou o organizador",
-        "/api/executar": "pediu para baixar relatórios",
-        "/api/executar/parar": "parou o download",
     }
     if caminho not in T:
         return None
     acao, chave, longa = T[caminho]
     if caminho == "/api/cliente" and dados.get("nome"):
         cliente = dados["nome"]
-    if caminho == "/api/executar" and not dados.get("cliente_id"):
-        cliente = "todos os clientes"
     if caminho == "/api/tratar" and not dados.get("cliente_id"):
         cliente = "todos os clientes"
     return {"acao": acao, "feito": F.get(caminho, acao), "chave": chave, "longa": longa, "cliente": cliente, "conta": conta, "mk": mk, "cliente_id": cid}
@@ -207,7 +199,7 @@ def recentes(n=40):
         with open(ARQ, "rb") as f:
             f.seek(0, 2)
             tam = f.tell()
-            f.seek(max(0, tam - 200 * 1024))
+            f.seek(max(0, tam - 64 * 1024))
             linhas = f.read().decode("utf-8", "ignore").splitlines()
     except OSError:
         return []
@@ -250,28 +242,6 @@ def _limpar():
             AGORA.pop(k)
 
 
-def _execucoes():
-    """Downloads rodando agora: neste computador e nas estações."""
-    out = []
-    try:
-        import executor
-        x = executor.ler_estado()
-        if x.get("rodando"):
-            import rede
-            out.append({"pc": rede.ler()["nome"], "cliente": x.get("cliente") or "", "etapa": x.get("etapa") or ""})
-    except Exception:
-        pass
-    try:
-        import rede
-        for n, e in rede.ESTACOES.items():
-            x = e.get("execucao") or {}
-            if x.get("rodando") and rede.online(n):
-                out.append({"pc": n, "cliente": x.get("cliente") or "", "etapa": x.get("etapa") or ""})
-    except Exception:
-        pass
-    return out
-
-
 def quadro(cfg=None):
     """O que a tela mostra no quadro 'Equipe agora'."""
     _limpar()
@@ -284,4 +254,4 @@ def quadro(cfg=None):
     pres = [{"quem": k, "usuario": p["usuario"], "pc": p["pc"], "aba": ABAS.get(p["aba"], p["aba"]),
              "cliente": nomes.get(p["cliente"], p["cliente"]) if p["cliente"] else "",
              "editando": nomes.get(p["editando"], p["editando"]) if p["editando"] else ""} for k, p in PRESENCA.items()]
-    return {"versao": versao(), "acoes": acoes, "presenca": pres, "downloads": _execucoes()}
+    return {"versao": versao(), "acoes": acoes, "presenca": pres, "downloads": []}

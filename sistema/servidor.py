@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Servidor local do painel (somente 127.0.0.1)."""
+"""Servidor do sistema online (Render): painel, ações e login de cada usuário."""
 import datetime as dt
+import gzip
 import html
 import json
 import os
-import subprocess
-import sys
 import threading
 import time
 import traceback
@@ -16,7 +15,6 @@ import comum
 import organizador
 
 TRAVA_CONFIG = comum.TRAVA_CFG   # a mesma trava usada pelos tratamentos ao completar a tabela de custos
-GANCHOS = {"mostrar_janela": None, "sair": None}  # preenchido pelo app desktop
 
 
 # ---------------------------------------------------------------- status do dia
@@ -25,7 +23,10 @@ def calcular_status(cfg, hoje=None):
     dia = comum.rotulo_dia(hoje)
     ini, fim = comum.periodo(hoje)
     esperado = {"inicio": comum.fmt(ini), "fim": comum.fmt(fim)}
-    hist = comum.ler_historico()
+    hist_por = {}
+    for e in comum.ler_historico():
+        if e.get("cliente") and e.get("mk"):
+            hist_por.setdefault((e["cliente"], e["mk"]), []).append(e)
     pend = organizador.estado_pendencias()
     linhas, resumo = [], {"esperados": 0, "recebidos": 0, "faltando": 0, "erro": 0, "tratados": 0}
     for c in comum.contas(cfg, so_ativas=True):
@@ -38,34 +39,24 @@ def calcular_status(cfg, hoje=None):
                 continue
             resumo["esperados"] += 1
             arq = os.path.join(comum.pasta_dia(cfg, comum.pasta_de(c), hoje), comum.nome_arquivo(mk, cfg, hoje))
-            evs = [e for e in hist if e.get("cliente") == c["id"] and e.get("mk") == mk]
+            evs = hist_por.get((c["id"], mk), [])
             hoje_evs = [e for e in evs if (e.get("data") or e.get("ts", ""))[:10] == hoje.isoformat()]   # dia de referência
-            regs = [e for e in hoje_evs if e.get("tipo") == "registro"]
-            ult_reg = regs[-1] if regs else None
             orgs = [e for e in evs if e.get("tipo") == "organizado"]
             ult_ok = orgs[-1]["ts"] if orgs else None
             linha = {"cliente_id": c["id"], "cliente": c["nome"], "grupo_id": c["cliente_id"], "grupo": c["cliente_nome"],
                      "conta": c["conta_nome"], "mk": mk, "mk_nome": cfg["marketplaces"][mk]["nome"],
                      "arquivo": arq, "ultima_extracao_ok": ult_ok, "periodo": None, "periodo_origem": None,
-                     "pasta_dia": comum.pasta_dia(cfg, comum.pasta_de(c), hoje), "registro": ult_reg,
-                     "manual": c.get("modo") == "manual" or not comum.baixa_sozinho(cfg, mk),
+                     "pasta_dia": comum.pasta_dia(cfg, comum.pasta_de(c), hoje),
                      "sem_tratador": bool(cfg["marketplaces"][mk].get("sem_tratador")),
                      "tipos_upload": [{"mk": k, "nome": v["nome"]} for k, v in cfg["marketplaces"].items() if k == mk or v.get("pai") == mk]}
             if os.path.exists(arq):
                 linha["estado"] = "recebido"
                 resumo["recebidos"] += 1
-                reg_ok = next((e for e in reversed(regs) if e.get("status") == "ok" and e.get("inicio")), None)
                 org_hoje = next((e for e in reversed(hoje_evs) if e.get("tipo") == "organizado"), None)
-                if reg_ok:
-                    linha["periodo"], linha["periodo_origem"] = "%s a %s" % (reg_ok["inicio"], reg_ok["fim"]), "informado pela extensão"
-                elif org_hoje and org_hoje.get("inicio"):
+                if org_hoje and org_hoje.get("inicio"):
                     linha["periodo"], linha["periodo_origem"] = "%s a %s" % (org_hoje["inicio"], org_hoje["fim"]), "lido do nome do arquivo"
                 else:
                     linha["periodo"], linha["periodo_origem"] = "%s a %s" % (esperado["inicio"], esperado["fim"]), "período esperado (não confirmado)"
-            elif ult_reg and ult_reg.get("status") == "erro":
-                linha["estado"] = "erro"
-                linha["detalhe"] = "Extensão registrou erro: %s %s" % (ult_reg.get("motivo", ""), ult_reg.get("detalhe", ""))
-                resumo["erro"] += 1
             elif nao_rec:
                 linha["estado"] = "nao_reconhecido"
                 linha["detalhe"] = "%d arquivo(s) parado(s) na _entrada sem reconhecimento" % len(nao_rec)
@@ -78,10 +69,6 @@ def calcular_status(cfg, hoje=None):
             else:
                 linha["estado"] = "faltando"
                 resumo["faltando"] += 1
-                if c.get("modo") == "manual":
-                    linha["detalhe"] = "Conta manual: clique em Subir relatório."
-                elif not comum.baixa_sozinho(cfg, mk):
-                    linha["detalhe"] = "%s ainda não baixa sozinho: clique em Subir relatório." % cfg["marketplaces"][mk]["nome"]
             trats = [e for e in hoje_evs if e.get("tipo") == "tratamento"]
             linha["tratamento"] = trats[-1] if trats else None
             if trats and trats[-1].get("ok") and os.path.exists(trats[-1].get("saida", "")):
@@ -103,45 +90,6 @@ def _pendencias_vivas(cfg, pend):
         vivas = [p for p in v if any(os.path.exists(os.path.join(e, p["arquivo"])) for e in entradas)]
         if vivas:
             saida[k] = vivas
-    return saida
-
-
-def _rede():
-    try:
-        import rede
-        return rede
-    except Exception:
-        return None
-
-
-def _deste_computador(conta):
-    return comum.deste_computador(conta)
-
-
-def info_perfis(cfg):
-    perfis = comum.listar_perfis(cfg)
-    usados = {}
-    for c in comum.contas(cfg):
-        if not _deste_computador(c):
-            continue
-        if c.get("perfil"):
-            usados.setdefault(c["perfil"], []).append(c)
-    saida = []
-    for p in perfis:
-        d = comum.pasta_downloads_perfil(cfg, p["dir"])
-        clientes = usados.get(p["dir"], [])
-        alvo = comum.pasta_entrada(cfg, comum.pasta_de(clientes[0])) if len(clientes) == 1 else None
-        alerta = None
-        if len(clientes) > 1:
-            alerta = "Este perfil está ligado a mais de uma conta (%s). Cada conta precisa de um perfil próprio." % ", ".join(c["nome"] for c in clientes)
-        elif alvo and not comum.mesma_pasta(d["pasta"], alvo):
-            alerta = "A pasta de downloads não é a _entrada de %s." % clientes[0]["nome"]
-        elif alvo and d["pergunta"]:
-            alerta = "O Chrome pergunta onde salvar cada arquivo; isso trava o download automático."
-        saida.append({**p, "extensao": comum.extensao_instalada(cfg, p["dir"]), "downloads": d["pasta"],
-                      "pergunta_onde_salvar": d["pergunta"], "erro_leitura": d["erro"],
-                      "clientes": [c["nome"] for c in clientes], "conta_ids": [c["id"] for c in clientes],
-                      "pasta_correta": alvo, "alerta": alerta})
     return saida
 
 
@@ -186,35 +134,44 @@ def _dia_ref(mes):
 def montar_estado(mes=None):
     cfg = comum.carregar_config()
     ref = _dia_ref(mes)
-    horarios = comum.horarios_escalonados(cfg)
-    atalhos = []
-    for c in comum.contas(cfg):
-        mks = [m for m in c.get("marketplaces", []) if comum.baixa_sozinho(cfg, m)]   # Temu/Via/Madeira/Site: sem atalho por enquanto
-        atalhos.append({
-            "cliente_id": c["id"], "cliente": c["nome"], "horario": horarios.get(c["id"]),
-            "combinado": {"nome": comum.nome_atalho(c), "texto": comum.prompt_combinado(cfg, c)} if mks else None,
-            "por_marketplace": [{"mk": m, "mk_nome": cfg["marketplaces"][m]["nome"], "nome": comum.nome_atalho(c, m),
-                                 "link": comum.link_cliente(cfg, c, m), "link_status": cfg["marketplaces"][m]["link_status"]
-                                 if not (c.get("links") or {}).get(m) else "personalizado para esta conta",
-                                 "texto": comum.prompt_marketplace(cfg, c, m)} for m in mks],
-        })
     ini, fim = comum.periodo()
     return {
-        "config": cfg, "contas": comum.contas(cfg), "perfis": info_perfis(cfg), "status": calcular_status(cfg, ref), "atalhos": atalhos,
+        "config": _config_tela(cfg), "contas": comum.contas(cfg), "status": calcular_status(cfg, ref),
         "dia_ref": ref.isoformat(), "mes_ref": "%04d-%02d" % _consolidado().mes_atual(ref), "mes_passado": ref != dt.date.today(),
-        "chrome_aberto": comum.chrome_aberto(), "chrome_exe": comum.chrome_exe(cfg),
-        "chrome_user_data": comum.chrome_user_data(cfg), "link_extensao": comum.LINK_EXTENSAO,
-        "pasta_sistema": comum.PASTA_SISTEMA, "nuvem": comum.NUVEM, "app_desktop": GANCHOS.get("mostrar_janela") is not None, "periodo": {"inicio": comum.fmt(ini), "fim": comum.fmt(fim)},
+        "nuvem": True, "periodo": {"inicio": comum.fmt(ini), "fim": comum.fmt(fim)},
         "agora": dt.datetime.now().isoformat(timespec="seconds"),
-        "execucao": _executor().ler_estado(), "claude_exe": _executor().claude_exe(cfg),
-        "evolucao": [e for e in comum.ler_historico(5000) if e.get("tipo") == "execucao"][-20:][::-1],
         "consolidados": _consolidado().ler_estado(), "meses_consolidado": _consolidado().meses_disponiveis(cfg, quantos=12),
         "lancamentos": _situacao_lanc_mes_atual(cfg),
         "forecasts": _forecasts_definidos(cfg),
-        "rede": _info_rede(),
         "atividade": (_atividade().recentes(30) if _atividade() else []),
         "equipe": (_atividade().quadro(cfg) if _atividade() else {}),
     }
+
+
+_SO_SERVIDOR_MK = ("padroes_nome", "palavras_conteudo")
+
+
+def _config_tela(cfg):
+    """Config para a tela: os padrões de reconhecimento de arquivo ficam só no servidor."""
+    out = dict(cfg)
+    out["marketplaces"] = {k: {kk: vv for kk, vv in v.items() if kk not in _SO_SERVIDOR_MK} for k, v in cfg["marketplaces"].items()}
+    return out
+
+
+_PAGINA = {}
+
+
+def _pagina_painel():
+    """painel.html (e a versão comprimida) guardados em memória: o arquivo só muda num novo deploy."""
+    arq = os.path.join(comum.PASTA_CODIGO, "painel.html")
+    mt = os.path.getmtime(arq)
+    if _PAGINA.get("mt") != mt:
+        with open(arq, "rb") as f:
+            bruto = f.read()
+        import hashlib
+        _PAGINA.update(mt=mt, bruto=bruto, gz=gzip.compress(bruto, compresslevel=9),
+                       etag='"%s"' % hashlib.sha1(bruto).hexdigest()[:16])
+    return _PAGINA["bruto"], _PAGINA["gz"], _PAGINA["etag"]
 
 
 def _atividade():
@@ -226,138 +183,9 @@ def _atividade():
         return None
 
 
-def _info_rede():
-    r = _rede()
-    if not r:
-        return {"papel": "sozinho"}
-    d = r.ler()
-    out = {"papel": d["papel"], "nome": d["nome"], "usuario": d.get("usuario") or "", "servidor": d["servidor"], "tem_senha": bool(d["senha"]),
-           "ips": r.ips_locais(), "estacoes": r.resumo_estacoes() if d["papel"] == "servidor" else {}}
-    return out
-
-
-def ler_rede(_dados):
-    return {"ok": True, "rede": _info_rede()}
-
-
-def salvar_rede(dados):
-    r = _rede()
-    try:
-        d = r.salvar(dados)
-    except ValueError as e:
-        return {"ok": False, "erro": str(e)}
-    return {"ok": True, "rede": _info_rede(), "aviso": "Feche e abra o app neste computador para aplicar (modo: %s)." % d["papel"]}
-
-
-def testar_rede(dados):
-    """Na estação: testa o endereço e a senha informados (antes de salvar)."""
-    import urllib.request, urllib.error
-    r = _rede()
-    s = str(dados.get("servidor") or "").strip()
-    if not s:
-        return {"ok": False, "erro": "Informe o endereço do computador principal."}
-    if not s.startswith("http"):
-        s = "http://" + s
-    if s.count(":") < 2 and not s.startswith("https://"):
-        s += ":%d" % int(comum.carregar_config().get("porta_painel", 8765))
-    req = urllib.request.Request(s.rstrip("/") + "/api/agente/config", data=b"{}", method="POST",
-                                 headers={"X-Painel": "1", "Content-Type": "application/json",
-                                          "Authorization": "Bearer " + r.token(str(dados.get("senha") or ""))})
-    try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            cfg = json.loads(resp.read())["config"]
-        return {"ok": True, "mensagem": "Conectado! O computador principal tem %d cliente(s)." % len(cfg.get("clientes", []))}
-    except urllib.error.HTTPError as e:
-        return {"ok": False, "erro": "Senha recusada." if e.code == 401 else "Erro %s no computador principal." % e.code}
-    except Exception as e:
-        return {"ok": False, "erro": "Não consegui conectar em %s (%s). Confira o IP, se o app está aberto lá e o firewall." % (s, getattr(e, "reason", e))}
-
-
-def liberar_firewall(_dados):
-    if os.name != "nt":
-        return {"ok": False, "erro": "Disponível apenas no Windows."}
-    porta = int(comum.carregar_config().get("porta_painel", 8765))
-    cmd = ('netsh advfirewall firewall delete rule name="Relatorios de Vendas" >nul 2>&1 & '
-           'netsh advfirewall firewall add rule name="Relatorios de Vendas" dir=in action=allow protocol=TCP localport=%d profile=private,domain' % porta)
-    try:  # pede permissão de administrador (janela do Windows)
-        subprocess.run(["powershell", "-NoProfile", "-Command",
-                        "Start-Process cmd -Verb RunAs -WindowStyle Hidden -ArgumentList '/c %s'" % cmd.replace("'", "''")],
-                       timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        return {"ok": True, "aviso": "Se o Windows pediu permissão e você aceitou, a porta %d foi liberada na rede privada." % porta}
-    except Exception as e:
-        return {"ok": False, "erro": str(e)}
-
-
-# ---------------------------------------------------------------- agente (estações chamam)
-def agente_ping(dados, ip=None):
-    return _rede().registrar_ping(dados, ip)
-
-
-def agente_config(_dados):
-    return {"ok": True, "config": comum.carregar_config()}
-
-
-def agente_arquivo(dados):
-    """A estação baixou um relatório: guarda na _entrada da conta aqui e organiza."""
-    import base64
-    cfg = comum.carregar_config()
-    c = comum.conta(cfg, dados.get("conta_id"))
-    if not c:
-        return {"ok": False, "erro": "Conta desconhecida."}
-    nome = os.path.basename(str(dados.get("nome") or ""))
-    if not nome or nome.startswith("."):
-        return {"ok": False, "erro": "Nome de arquivo inválido."}
-    pasta = comum.pasta_entrada(cfg, comum.pasta_de(c))
-    os.makedirs(pasta, exist_ok=True)
-    destino = os.path.join(pasta, nome)
-    base, ext = os.path.splitext(destino)
-    n = 1
-    while os.path.exists(destino):
-        destino = "%s (%d)%s" % (base, n, ext)
-        n += 1
-    with open(destino + ".parte", "wb") as f:
-        f.write(base64.b64decode(dados.get("conteudo") or ""))
-    os.replace(destino + ".parte", destino)
-    comum.log("[%s] arquivo recebido da estação %s: %s" % (c["nome"], dados.get("estacao") or "?", nome))
-    if dados.get("organizar", True):
-        organizador.executar(forcar_estavel=True)
-    return {"ok": True}
-
-
-def agente_organizar(_dados):
-    return {"ok": True, "resumo": organizador.executar(forcar_estavel=True)}
-
-
-def agente_faltando(dados):
-    cfg = comum.carregar_config()
-    c = comum.conta(cfg, dados.get("conta_id"))
-    if not c:
-        return {"ok": False, "erro": "Conta desconhecida."}
-    return {"ok": True, "faltando": _executor().faltando(cfg, c, dados.get("mks") or [])}
-
-
-def agente_roteiro(dados):
-    cfg = comum.carregar_config()
-    c = comum.conta(cfg, dados.get("conta_id"))
-    if not c:
-        return {"ok": False, "erro": "Conta desconhecida."}
-    return {"ok": True, "aprendidos": _executor().aprender_roteiros(cfg, c, dados.get("texto") or "", dados.get("inicio_iso"))}
-
-
-def agente_evento(dados):
-    """Eventos de execução da estação (histórico do painel)."""
-    ev = dados.get("evento") or {}
-    if isinstance(ev, dict) and ev.get("tipo"):
-        ev["estacao"] = dados.get("estacao")
-        comum.registrar_evento(ev)
-    if dados.get("log"):
-        comum.log("[estação %s] %s" % (dados.get("estacao") or "?", str(dados["log"])[:500]))
-    return {"ok": True}
-
-
 # ---------------------------------------------------------------- ações
 def salvar_cliente(dados):
-    """Cliente = grupo com uma ou mais contas (uma por navegador/perfil do Chrome)."""
+    """Cliente = grupo com uma ou mais contas (cada conta com os seus marketplaces)."""
     with TRAVA_CONFIG:
         cfg = comum.carregar_config()
         erro = comum.validar_nome_cliente(dados.get("nome"))
@@ -370,15 +198,12 @@ def salvar_cliente(dados):
             return {"ok": False, "erro": "Já existe um cliente com esse nome."}
         contas_in = dados.get("contas") or []
         if not contas_in:
-            return {"ok": False, "erro": "Cadastre pelo menos uma conta (navegador) para o cliente."}
+            return {"ok": False, "erro": "Cadastre pelo menos uma conta para o cliente."}
         atual = next((c for c in cfg["clientes"] if c["id"] == cid), None) if cid else None
         if cid and not atual:
             return {"ok": False, "erro": "Cliente não encontrado."}
-        # o mesmo nome de perfil pode existir em computadores diferentes (cada Chrome tem os seus)
-        perfis_outros = {(ct.get("computador") or "", ct.get("perfil")): "%s / %s" % (c["nome"], ct["nome"])
-                         for c in outros for ct in c.get("contas", []) if ct.get("perfil")}
         antigas = {ct["id"]: ct for ct in (atual or {}).get("contas", [])}
-        novas, nomes, perfis = [], set(), set()
+        novas, nomes = [], set()
         for i, ci in enumerate(contas_in, 1):
             cn = (ci.get("nome") or "").strip() or nome
             erro = comum.validar_nome_cliente(cn)
@@ -387,24 +212,10 @@ def salvar_cliente(dados):
             if comum.sem_acento(cn) in nomes:
                 return {"ok": False, "erro": "Duas contas com o mesmo nome (%s)." % cn}
             nomes.add(comum.sem_acento(cn))
-            modo = "manual" if ci.get("modo") == "manual" else "automatico"
-            perfil = "" if modo == "manual" else (ci.get("perfil") or "")   # conta manual: relatórios sobem pelo app
-            comp = "" if modo == "manual" else str(ci.get("computador") or "").strip()
-            chave = (comp, perfil)
-            if perfil and (chave in perfis or chave in perfis_outros):
-                dono = perfis_outros.get(chave, "outra conta deste cliente")
-                return {"ok": False, "erro": "O perfil da conta \"%s\" já está ligado a %s. Use um perfil por conta." % (cn, dono)}
-            if perfil:
-                perfis.add(chave)
             mks = [m for m in ci.get("marketplaces", []) if m in cfg["marketplaces"] and not cfg["marketplaces"][m].get("oculto")]
-            links = {m: (ci.get("links") or {}).get(m, "").strip() for m in mks if (ci.get("links") or {}).get(m, "").strip()}
-            for m, l in links.items():
-                if not l.startswith("https://"):
-                    return {"ok": False, "erro": "Conta \"%s\": o link de %s precisa começar com https://" % (cn, cfg["marketplaces"][m]["nome"])}
             ct_id = ci.get("id") if ci.get("id") in antigas else comum.gerar_id(cn, {x["id"] for x in novas} | set(antigas))
-            ct = dict(antigas.get(ct_id, {}))
-            ct.update({"id": ct_id, "nome": cn, "modo": modo, "perfil": perfil, "computador": comp, "marketplaces": mks, "links": links,
-                       "ativo": bool(ci.get("ativo", True))})
+            ct = {k: v for k, v in antigas.get(ct_id, {}).items() if k not in ("modo", "perfil", "computador", "links")}
+            ct.update({"id": ct_id, "nome": cn, "marketplaces": mks, "ativo": bool(ci.get("ativo", True))})
             novas.append(ct)
         avisos = []
         if atual:
@@ -421,8 +232,6 @@ def salvar_cliente(dados):
         else:
             c = {"id": comum.gerar_id(nome, {x["id"] for x in cfg["clientes"]})}
             cfg["clientes"].append(c)
-        if atual and (atual["nome"] != nome or any(antigas.get(ct["id"], ct)["nome"] != ct["nome"] for ct in novas)):
-            avisos.append("Confira em Perfis e downloads: a pasta de downloads das contas precisa apontar para a _entrada nova.")
         c.update({"nome": nome, "ativo": bool(dados.get("ativo", True)), "contas": novas})
         c.setdefault("imposto", float(cfg.get("tratamento", {}).get("imposto_padrao", 0.14)))
         comum.criar_pastas_base(cfg)
@@ -443,78 +252,6 @@ def remover_cliente(dados):
         return {"ok": True, "aviso": "Cliente removido do cadastro. As pastas e arquivos dele foram mantidos."}
 
 
-def salvar_ajustes(dados):
-    with TRAVA_CONFIG:
-        cfg = comum.carregar_config()
-        h = dados.get("horarios")
-        if h:
-            for k in ("abrir_chrome", "inicio_atalhos", "organizador_inicio", "organizador_fim"):
-                v = str(h.get(k, cfg["horarios"][k]))
-                try:
-                    dt.datetime.strptime(v, "%H:%M")
-                except ValueError:
-                    return {"ok": False, "erro": "Horário inválido em %s: %s (use HH:MM)" % (k, v)}
-                cfg["horarios"][k] = v
-            for k in ("intervalo_entre_perfis_min", "organizador_intervalo_min"):
-                try:
-                    n = int(h.get(k, cfg["horarios"][k]))
-                    assert 1 <= n <= 120
-                except (ValueError, AssertionError):
-                    return {"ok": False, "erro": "Intervalo inválido em %s (1 a 120 minutos)" % k}
-                cfg["horarios"][k] = n
-        for mk, txt in (dados.get("instrucoes") or {}).items():
-            txt = (txt or "").strip()
-            if mk in cfg["marketplaces"] and txt:
-                if len(txt) > 4000:
-                    return {"ok": False, "erro": "Instruções de %s muito longas (máx. 4000 caracteres)." % cfg["marketplaces"][mk]["nome"]}
-                cfg["marketplaces"][mk]["instrucoes"] = txt
-        for mk, link in (dados.get("links") or {}).items():
-            if mk in cfg["marketplaces"] and link:
-                if not link.startswith("https://"):
-                    return {"ok": False, "erro": "Links precisam começar com https://"}
-                if link != cfg["marketplaces"][mk]["link"]:
-                    cfg["marketplaces"][mk]["link"] = link
-                    cfg["marketplaces"][mk]["link_status"] = "ajustado por você em " + dt.date.today().strftime("%d/%m/%Y")
-        ex = dados.get("execucao")
-        if ex:
-            atual = cfg.setdefault("execucao", {})
-            try:
-                atual["limite_minutos_por_cliente"] = max(5, min(180, int(ex.get("limite_minutos_por_cliente", atual.get("limite_minutos_por_cliente", 40)))))
-                atual["max_turnos"] = max(20, min(1000, int(ex.get("max_turnos", atual.get("max_turnos", 200)))))
-            except ValueError:
-                return {"ok": False, "erro": "Limites de execução inválidos."}
-            atual["modelo"] = str(ex.get("modelo", atual.get("modelo", ""))).strip()
-            atual["modelo_reforco"] = str(ex.get("modelo_reforco", atual.get("modelo_reforco", ""))).strip()
-            if "modo_paralelo" in ex:
-                atual["modo_paralelo"] = bool(ex["modo_paralelo"])
-            if "agendado" in ex:
-                atual["agendado"] = bool(ex["agendado"])
-        for mk, por_link in (dados.get("roteiros") or {}).items():
-            if mk not in cfg["marketplaces"]:
-                continue
-            rots = cfg["marketplaces"][mk].setdefault("roteiros", {})
-            for link, txt in (por_link or {}).items():
-                txt = (txt or "").strip()[:1500]
-                if not txt:
-                    rots.pop(link, None)
-                elif link in rots and rots[link].get("texto") != txt:
-                    rots[link].update({"texto": txt, "editado_por_voce": True,
-                                       "atualizado": dt.datetime.now().isoformat(timespec="seconds")})
-        for chave in ("chrome_exe", "chrome_user_data", "claude_exe"):
-            if chave in dados:
-                cfg[chave] = dados[chave].strip()
-        comum.salvar_config(cfg)
-        return {"ok": True}
-
-
-def alterar_downloads(dados):
-    cfg = comum.carregar_config()
-    c = comum.conta(cfg, dados.get("cliente_id"))
-    if not c or not c.get("perfil"):
-        return {"ok": False, "erro": "Conta sem perfil do Chrome definido."}
-    return comum.alterar_pasta_downloads(cfg, c["perfil"], comum.pasta_entrada(cfg, comum.pasta_de(c)))
-
-
 def caminho_permitido(alvo):
     cfg = comum.carregar_config()
     raiz = os.path.normcase(os.path.abspath(comum.raiz(cfg)))
@@ -526,114 +263,14 @@ def caminho_permitido(alvo):
 
 
 def abrir_pasta(dados):
-    cfg = comum.carregar_config()
+    """Online não há pasta para abrir: um arquivo é baixado pelo navegador; uma pasta, não."""
     alvo = dados.get("caminho", "")
     if not caminho_permitido(alvo):
-        return {"ok": False, "erro": "Só abro pastas dentro de " + comum.raiz(cfg)}
-    if dados.get("_remoto"):   # pedido vindo de outro computador: o arquivo é baixado lá, não aberto aqui
-        if os.path.isfile(alvo):
-            from urllib.parse import quote
-            return {"ok": True, "baixar": "/api/arquivo?caminho=" + quote(alvo), "nome": os.path.basename(alvo)}
-        return {"ok": False, "erro": "Pastas abrem só no computador principal (%s). Os arquivos podem ser abertos daqui." % alvo}
+        return {"ok": False, "erro": "Só arquivos dos relatórios podem ser abertos."}
     if os.path.isfile(alvo):
-        if os.name == "nt":
-            os.startfile(alvo)
-        return {"ok": True}
-    if not os.path.isdir(alvo):
-        return {"ok": False, "erro": "A pasta ainda não existe (nenhum relatório organizado nela hoje)."}
-    if os.name == "nt":
-        os.startfile(alvo)
-    return {"ok": True}
-
-
-def reaplicar_agendamento(_dados):
-    if os.name != "nt":
-        return {"ok": False, "erro": "Disponível apenas no Windows."}
-    script = os.path.join(comum.PASTA_SISTEMA, "agendar.ps1")
-    env = {k: v for k, v in os.environ.items() if k.upper() not in ("PYTHONPATH", "PYTHONHOME")}
-    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script], env=env,
-                       capture_output=True, text=True, timeout=120,
-                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    return {"ok": r.returncode == 0, "saida": (r.stdout or "")[-3000:], "erro": (r.stderr or "")[-3000:] or None}
-
-
-def abrir_chrome_agora(_dados):
-    import abrir_chrome
-    return abrir_chrome.abrir()
-
-
-def abrir_no_perfil(dados):
-    cfg = comum.carregar_config()
-    perfil = dados.get("perfil")
-    if dados.get("cliente_id"):
-        c = comum.conta(cfg, dados["cliente_id"])
-        if not c or not c.get("perfil"):
-            return {"ok": False, "erro": "Cliente sem perfil do Chrome definido."}
-        perfil = c["perfil"]
-    if not perfil:
-        return {"ok": False, "erro": "Perfil não informado."}
-    return comum.abrir_no_perfil(cfg, perfil, dados.get("url", ""))
-
-
-def mostrar_janela(_dados):
-    f = GANCHOS.get("mostrar_janela")
-    if not f:
-        return {"ok": False, "erro": "sem janela"}
-    f()
-    return {"ok": True}
-
-
-def atualizar_sistema(_dados):
-    """Botão "Atualizar sistema": abre o atualizar.ps1 (janela do PowerShell), que espera o app fechar,
-    remonta o PainelRelatorios.exe com os arquivos atuais de _sistema e abre o app de novo."""
-    script = os.path.join(comum.PASTA_SISTEMA, "atualizar.ps1")
-    if os.name != "nt" or not os.path.isfile(script):
-        return {"ok": False, "erro": "Atualizador não encontrado (%s)." % script}
-    try:
-        if _executor().ler_estado().get("rodando"):
-            return {"ok": False, "erro": "Há um download de relatórios em andamento. Espere terminar (ou pare) e atualize depois."}
-    except Exception:
-        pass
-    env = {k: v for k, v in os.environ.items()
-           if not k.upper().startswith(("_PYI", "_MEI")) and k.upper() not in ("PYTHONPATH", "PYTHONHOME")}
-    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-AppPid", str(os.getpid())],
-                     cwd=comum.PASTA_SISTEMA, env=env, creationflags=flags, close_fds=True)
-    comum.log("Atualização do app pedida pelo painel: fechando para remontar.")
-
-    def fechar():
-        import time
-        time.sleep(1.5)
-        f = GANCHOS.get("sair")
-        if f:
-            f()
-        else:
-            os._exit(0)
-    threading.Thread(target=fechar, daemon=True).start()
-    return {"ok": True}
-
-
-# arquivos do sistema que a estação copia do principal no "Atualizar sistema" (nunca config.json, dados, .venv, app)
-ARQUIVOS_SISTEMA_EXTRA = ("painel.html", "atualizar.ps1", "ATUALIZAR.bat", "agendar.ps1", "remover_agendamentos.ps1", "icone.ico")
-
-
-def arquivos_sistema(_dados=None):
-    """Código atual do principal (todos os .py + painel e scripts), em base64, para a estação se atualizar."""
-    import base64
-    import glob
-    arqs = {}
-    nomes = [os.path.basename(p) for p in glob.glob(os.path.join(comum.PASTA_CODIGO, "*.py"))] + list(ARQUIVOS_SISTEMA_EXTRA)
-    for n in sorted(set(nomes)):
-        p = os.path.join(comum.PASTA_CODIGO, n)
-        if os.path.isfile(p):
-            with open(p, "rb") as f:
-                arqs[n] = base64.b64encode(f.read()).decode("ascii")
-    return {"ok": True, "arquivos": arqs, "gerado": dt.datetime.now().isoformat(timespec="seconds")}
-
-
-def _executor():
-    import executor
-    return executor
+        from urllib.parse import quote
+        return {"ok": True, "baixar": "/api/arquivo?caminho=" + quote(alvo), "nome": os.path.basename(alvo)}
+    return {"ok": False, "erro": "No sistema online só os arquivos podem ser abertos (são baixados pelo navegador)."}
 
 
 def _consolidado():
@@ -782,7 +419,7 @@ def salvar_tabela_custos(dados):
             linhas, info = _tratador().salvar_tabela_mes(cid, mes, dados.get("linhas"))
         except ValueError as e:
             return {"ok": False, "erro": str(e)}
-        info["nome_original"] = "editada no app" + ((" por " + dados["estacao"]) if dados.get("estacao") else "")
+        info["nome_original"] = "editada no app" + ((" por " + dados["_por"]) if dados.get("_por") else "")
         auto = (info_ant or {}).get("adicionados_auto") or {}
         if auto:   # continua marcando os que o sistema acrescentou e ainda estão sem custo
             info["adicionados_auto"] = {k: v for k, v in auto.items() if any(l["SKU"] == k and l["Custo"] is None for l in linhas)}
@@ -1010,9 +647,9 @@ def classificar(d):
 
 
 def subir_relatorio(dados):
-    """Upload manual de um relatório de vendas (conta manual ou quando o download automático falhou).
+    """Relatório de vendas subido pelo site.
 
-    O arquivo vai para a _entrada da conta e passa pelo mesmo caminho do download: renomeia, guarda versão
+    O arquivo vai para a _entrada da conta e passa pelo organizador: renomeia, guarda versão
     anterior, converte/extrai se precisar, trata e refaz o consolidado. Nada é apagado."""
     import base64
     cfg = comum.carregar_config()
@@ -1262,7 +899,7 @@ def salvar_depara_app(dados):
     itens = dados.get("itens") or {}
     if not isinstance(itens, dict) or not itens:
         return {"ok": False, "erro": "Nada para salvar."}
-    r = _lanc().salvar_depara_manual(cfg, _lanc().dono(u), mk, itens, por=dados.get("estacao") or "")
+    r = _lanc().salvar_depara_manual(cfg, _lanc().dono(u), mk, itens, por=dados.get("_por") or "")
     _consolidar_depois([u["id"]], "de-para preenchido no app")
     return dict(r, ok=True)
 
@@ -1796,45 +1433,12 @@ ACOES = {
     "/api/cargas": historico_cargas,
     "/api/tratado/resumo": resumo_tratado,
     "/api/lancamento/modelo": modelo_lancamento,
-    "/api/executar": lambda d: _executor().rodar_em_segundo_plano([d["cliente_id"]] if d.get("cliente_id") else None,
-                                                                  d.get("mk"), "botão do app"),
-    "/api/executar/parar": lambda d: _executor().parar(),
-    "/api/executar/agendado": lambda d: _executor().rodar_em_segundo_plano(None, None, "agendamento", so_locais=True),
-    "/api/claude/instalar": lambda d: _executor().instalar_claude(),
-    "/api/claude/login": lambda d: _executor().login_claude(),
-    "/api/claude/status": lambda d: {"ok": True, **_executor().status_claude()},
-    "/api/claude/testar": lambda d: _executor().testar_conexao(d.get("cliente_id")),
-    "/api/abrir-no-perfil": abrir_no_perfil,
-    "/api/janela/mostrar": mostrar_janela,
-    "/api/sistema/atualizar": atualizar_sistema,
-    "/api/sistema/arquivos": arquivos_sistema,
     "/api/cliente": salvar_cliente,
     "/api/cliente/remover": remover_cliente,
-    "/api/ajustes": salvar_ajustes,
-    "/api/downloads": alterar_downloads,
     "/api/organizar": lambda d: {"ok": True, "resumo": organizador.executar(forcar_estavel=True)},
     "/api/classificar": classificar,
     "/api/abrir-pasta": abrir_pasta,
-    "/api/agendar": reaplicar_agendamento,
-    "/api/abrir-chrome": abrir_chrome_agora,
-    "/api/rede/ler": ler_rede,
-    "/api/rede/salvar": salvar_rede,
-    "/api/rede/testar": testar_rede,
-    "/api/rede/firewall": liberar_firewall,
-    "/api/agente/config": agente_config,
-    "/api/agente/arquivo": agente_arquivo,
-    "/api/agente/organizar": agente_organizar,
-    "/api/agente/faltando": agente_faltando,
-    "/api/agente/roteiro": agente_roteiro,
-    "/api/agente/evento": agente_evento,
 }
-# ações que só fazem sentido no próprio computador (nunca pela rede)
-SO_LOCAL = {"/api/rede/salvar", "/api/rede/firewall", "/api/janela/mostrar", "/api/sistema/atualizar", "/api/agendar", "/api/claude/instalar", "/api/claude/login"}
-# ações que mexem no Chrome deste computador: a estação faz as dela sozinha; as que chegam aqui pela rede são de contas daqui
-NO_CHROME_DAQUI = {"/api/abrir-no-perfil", "/api/abrir-chrome", "/api/downloads"}
-
-
-
 PAGINA_LOGIN = """<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Relatórios de Vendas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1878,20 +1482,9 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _local(self):
-        if comum.NUVEM:
-            return False         # online: todo acesso vem de fora e precisa do login
-        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
-
-    def _host_ok(self):
-        porta = self.server.server_address[1]
-        return self.headers.get("Host", "") in ("localhost:%d" % porta, "127.0.0.1:%d" % porta)
-
     def _sessao_ok(self):
-        """Online: cookie de sessão de um usuário (login e senha próprios)."""
+        """Cookie de sessão de um usuário (login e senha próprios)."""
         self._usuario = None
-        if not comum.NUVEM:
-            return False
         import usuarios
         for parte in (self.headers.get("Cookie") or "").split(";"):
             k, _, v = parte.strip().partition("=")
@@ -1900,72 +1493,52 @@ class Handler(BaseHTTPRequestHandler):
                 return self._usuario is not None
         return False
 
-    def _token_ok(self):
-        if self._sessao_ok():
-            return True
-        r = _rede()
-        if not r or r.papel() != "servidor":
-            return False
-        t = r.token()
-        if not t:
-            return False
+    def _chave_admin_ok(self):
+        """Chave do admin (Authorization: Bearer ...), usada pelo exportar_nuvem.py para levar dados de um computador."""
+        import hashlib
         import hmac
+        import usuarios
+        senha = usuarios.senha_admin()
         auth = self.headers.get("Authorization", "")
-        if auth.startswith("Bearer ") and hmac.compare_digest(auth[7:].strip(), t):
+        if not senha or not auth.startswith("Bearer "):
+            return False
+        t = hashlib.sha256(("relatorios-vendas:" + senha).encode("utf-8")).hexdigest()
+        if hmac.compare_digest(auth[7:].strip(), t):
+            self._usuario = usuarios.achar(usuarios.login_admin())
             return True
-        for parte in (self.headers.get("Cookie") or "").split(";"):
-            k, _, v = parte.strip().partition("=")
-            if k == "rv_token" and hmac.compare_digest(v, t):
-                return True
         return False
 
     def _permitido(self):
-        """local: só com Host localhost (proteção contra sites maliciosos). Rede: precisa da senha."""
-        if self._local() and self._host_ok():
-            return True
-        if comum.NUVEM:
-            ip = self.client_ip()
-            if _limitar_login(ip):
-                return False
-            ok = self._token_ok()
-            if not ok and ("Bearer " in (self.headers.get("Authorization") or "") or "rv_token=" in (self.headers.get("Cookie") or "")
-                           or "rv_sessao=" in (self.headers.get("Cookie") or "")):
-                _limitar_login(ip, falhou=True)      # chave errada também conta como tentativa
-            return ok
-        return not self._local() and self._token_ok()
-
-    def _remoto(self):
-        return not self._local()
+        """Todo acesso precisa do login (ou da chave do admin). Erros repetidos bloqueiam o endereço por 15 minutos."""
+        ip = self.client_ip()
+        if _limitar_login(ip):
+            return False
+        ok = self._sessao_ok() or self._chave_admin_ok()
+        if not ok and ("Bearer " in (self.headers.get("Authorization") or "") or "rv_sessao=" in (self.headers.get("Cookie") or "")):
+            _limitar_login(ip, falhou=True)      # chave errada também conta como tentativa
+        return ok
 
     def client_ip(self):
         return (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
 
     def _identidade(self):
-        """(quem, nome da pessoa, computador) de quem fez o pedido."""
-        from urllib.parse import unquote
+        """(quem, nome da pessoa, de onde) de quem fez o pedido."""
+        u = getattr(self, "_usuario", None) or {"login": "?", "nome": "?"}
+        return "web|%s" % u["login"], u.get("nome") or u["login"], "online"
+
+    def _eu(self):
+        quem, usuario, pc = self._identidade()
+        eu = {"quem": quem, "usuario": usuario, "pc": pc}
         u = getattr(self, "_usuario", None)
         if u:
-            return "web|%s" % u["login"], u.get("nome") or u["login"], "online"
-        if self._remoto():
-            pc = unquote(self.headers.get("X-Estacao") or "") or ("navegador " + self.client_address[0])
-            usuario = unquote(self.headers.get("X-Usuario") or "") or pc
-        else:
-            r = _rede()
-            d = r.ler() if r else {"nome": "este computador", "usuario": ""}
-            pc, usuario = d["nome"], d.get("usuario") or d["nome"]
-        return "%s|%s" % (pc, usuario), usuario, pc
+            eu.update(login=u["login"], admin=u.get("perfil") == "admin", principal=bool(u.get("principal")))
+        return eu
 
     def _login(self, erro=""):
-        if comum.NUVEM:
-            if not os.environ.get("ADMIN_SENHA"):
-                erro = erro or "Senha do admin ainda não definida (variável ADMIN_SENHA no Render)."
-            return self._enviar(200 if not erro else 401, PAGINA_LOGIN.replace("{ERRO}", html.escape(erro)),
-                                "text/html; charset=utf-8")
-        corpo = ("<h1>Relatórios de Vendas</h1><p>Este é o computador principal. Digite a senha da rede para entrar.</p>"
-                 "<form method='post' action='/login'><input type='password' name='senha' autofocus "
-                 "style='font-size:1.1em;padding:8px;width:240px'> <button style='font-size:1.1em;padding:8px 16px'>Entrar</button></form>"
-                 "<p style='color:#b42318'>%s</p>" % html.escape(erro))
-        return self._enviar(200 if not erro else 401, self._pagina("Entrar", corpo), "text/html; charset=utf-8")
+        if not os.environ.get("ADMIN_SENHA"):
+            erro = erro or "Senha do admin ainda não definida (variável ADMIN_SENHA no Render)."
+        return self._enviar(200 if not erro else 401, PAGINA_LOGIN.replace("{ERRO}", html.escape(erro)),
+                            "text/html; charset=utf-8")
 
     def _usuarios(self, caminho):
         """Cadastro de usuários do online (admin) e troca da própria senha (todos)."""
@@ -1973,8 +1546,8 @@ class Handler(BaseHTTPRequestHandler):
         u = getattr(self, "_usuario", None)
         tam = int(self.headers.get("Content-Length") or 0)
         dados = json.loads(self.rfile.read(tam) or b"{}") if tam else {}
-        if not comum.NUVEM or not u:
-            return {"ok": False, "erro": "Disponível só no sistema online, com login."}
+        if not u:
+            return {"ok": False, "erro": "Entre com o seu usuário."}
         try:
             if caminho == "/api/usuarios/minha-senha":
                 usuarios.trocar_minha_senha(u["login"], dados.get("atual"), dados.get("nova"))
@@ -1998,23 +1571,31 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": False, "erro": str(e)}
         return {"ok": False, "erro": "ação desconhecida"}
 
-    def _enviar(self, codigo, corpo, tipo="application/json; charset=utf-8"):
+    def _enviar(self, codigo, corpo, tipo="application/json; charset=utf-8", gz=None, etag=None):
+        """Responde; texto/JSON com mais de 1 KB vai comprimido (gzip) quando o navegador aceita."""
         if isinstance(corpo, (dict, list)):
-            corpo = json.dumps(corpo, ensure_ascii=False)
+            corpo = json.dumps(corpo, ensure_ascii=False, separators=(",", ":"))
         dados = corpo.encode("utf-8") if isinstance(corpo, str) else corpo
-        self.send_response(codigo)
-        self.send_header("Content-Type", tipo)
-        self.send_header("Content-Length", str(len(dados)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(dados)
-
-    def _pagina(self, titulo, corpo):
-        return ("<!doctype html><html lang='pt-br'><head><meta charset='utf-8'><title>%s</title>"
-                "<style>body{font-family:Segoe UI,system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 16px;color:#1d2433}"
-                "b{font-size:1.6em}code{background:#eef1f6;padding:2px 6px;border-radius:4px}</style></head><body>%s</body></html>"
-                % (html.escape(titulo), corpo))
+        comprimir = "gzip" in (self.headers.get("Accept-Encoding") or "") and (gz is not None or len(dados) > 1024)
+        if comprimir:
+            dados = gz if gz is not None else gzip.compress(dados, compresslevel=5)
+        try:
+            self.send_response(codigo)
+            self.send_header("Content-Type", tipo)
+            self.send_header("Content-Length", str(len(dados)))
+            if comprimir:
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Vary", "Accept-Encoding")
+            if etag:      # a tela: o navegador pergunta se mudou (resposta curta quando não mudou)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", "no-cache")
+            else:
+                self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(dados)
+        except (BrokenPipeError, ConnectionResetError):
+            pass          # a pessoa fechou a aba ou recarregou antes da resposta chegar
 
     def do_GET(self):
         url = urlparse(self.path)
@@ -2023,17 +1604,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._enviar(200, {"ok": True})
         if url.path == "/sair":
             self.send_response(303)
-            self.send_header("Set-Cookie", "rv_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" + ("; Secure" if comum.NUVEM else ""))
-            if comum.NUVEM:
-                self.send_header("Set-Cookie", "rv_sessao=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure")
+            self.send_header("Set-Cookie", "rv_sessao=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure")
             self.send_header("Location", "/")
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
         if not self._permitido():
-            if self._remoto() and url.path in ("/", "/index.html", "/login") and _rede() and _rede().papel() == "servidor":
+            if url.path in ("/", "/index.html", "/login"):
                 return self._login()
-            return self._enviar(403 if self._local() else 401, {"erro": "host não permitido" if self._local() else "senha necessária"})
+            return self._enviar(401, {"erro": "senha necessária"})
         try:
             if url.path == "/api/arquivo":
                 alvo = q.get("caminho", "")
@@ -2084,110 +1663,53 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(dados)
                 return
             if url.path in ("/", "/index.html"):
-                with open(os.path.join(comum.PASTA_CODIGO, "painel.html"), "rb") as f:
-                    return self._enviar(200, f.read(), "text/html; charset=utf-8")
+                bruto, gz, etag = _pagina_painel()
+                if self.headers.get("If-None-Match") == etag:      # o navegador já tem esta versão da tela
+                    self.send_response(304)
+                    self.send_header("ETag", etag)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                return self._enviar(200, bruto, "text/html; charset=utf-8", gz=gz if "gzip" in (self.headers.get("Accept-Encoding") or "") else None,
+                                    etag=etag)
             if url.path == "/api/estado":
                 est = montar_estado(q.get("mes"))
-                quem, usuario, pc = self._identidade()
-                est["eu"] = {"quem": quem, "usuario": usuario, "pc": pc}
-                u = getattr(self, "_usuario", None)
-                if u:
-                    est["eu"].update(login=u["login"], admin=u.get("perfil") == "admin", principal=bool(u.get("principal")))
+                est["eu"] = self._eu()
                 return self._enviar(200, est)
             if url.path == "/api/equipe":
                 at = _atividade()
-                quem, usuario, pc = self._identidade()
-                eu = {"quem": quem, "usuario": usuario, "pc": pc}
-                u = getattr(self, "_usuario", None)
-                if u:
-                    eu.update(login=u["login"], admin=u.get("perfil") == "admin", principal=bool(u.get("principal")))
-                return self._enviar(200, {"quadro": at.quadro(comum.carregar_config()), "recentes": at.recentes(30), "eu": eu})
-            if url.path == "/periodo":
-                ini, fim = comum.periodo()
-                if q.get("formato") == "json":
-                    return self._enviar(200, {"inicio": comum.fmt(ini), "fim": comum.fmt(fim)})
-                corpo = ("<h1>Período do relatório</h1><p>INICIO: <b id='inicio'>%s</b></p><p>FIM: <b id='fim'>%s</b></p>"
-                         "<p>Hoje: %s. Regra: dia 1 = mês anterior inteiro; demais dias = dia 1 do mês até ontem.</p>"
-                         % (comum.fmt(ini), comum.fmt(fim), dt.date.today().strftime("%d/%m/%Y")))
-                return self._enviar(200, self._pagina("Período", corpo), "text/html; charset=utf-8")
-            if url.path == "/registrar":
-                return self._registrar(q)
-            if url.path == "/saude":
-                return self._enviar(200, {"ok": True})
+                return self._enviar(200, {"quadro": at.quadro(comum.carregar_config()), "recentes": at.recentes(30), "eu": self._eu()})
             return self._enviar(404, {"erro": "não encontrado"})
         except Exception as e:
             traceback.print_exc()
             return self._enviar(500, {"erro": str(e)})
 
-    def _registrar(self, q):
-        cfg = comum.carregar_config()
-        c = comum.conta(cfg, q.get("cliente"))
-        mk = q.get("mk")
-        status = q.get("status")
-        if not c or mk not in cfg["marketplaces"] or status not in ("ok", "erro"):
-            corpo = "<h1>Registro NÃO aceito</h1><p>Cliente, marketplace ou status inválido.</p>"
-            return self._enviar(400, self._pagina("Erro", corpo), "text/html; charset=utf-8")
-        ev = {"tipo": "registro", "cliente": c["id"], "mk": mk, "status": status}
-        for k in ("inicio", "fim", "motivo", "detalhe"):
-            if q.get(k):
-                ev[k] = q[k][:300]
-        comum.registrar_evento(ev)
-        comum.log("[%s] extensão registrou %s em %s %s" % (c["nome"], status.upper(), cfg["marketplaces"][mk]["nome"],
-                                                          ("— " + ev.get("motivo", "") + " " + ev.get("detalhe", "")) if status == "erro" else ""))
-        corpo = "<h1>Registrado</h1><p>%s · %s · <b>%s</b></p><p>Pode fechar esta aba.</p>" % (
-            html.escape(c["nome"]), html.escape(cfg["marketplaces"][mk]["nome"]), "OK" if status == "ok" else "ERRO")
-        return self._enviar(200, self._pagina("Registrado", corpo), "text/html; charset=utf-8")
-
     def do_POST(self):
         caminho = urlparse(self.path).path
-        if caminho == "/login" and self._remoto():
+        if caminho == "/login":
+            import usuarios
             tam = int(self.headers.get("Content-Length") or 0)
             form = parse_qs((self.rfile.read(tam) or b"").decode("utf-8"))
-            senha = form.get("senha", [""])[0]
-            r = _rede()
-            import hmac
-            if comum.NUVEM:
-                import usuarios
-                if _limitar_login(self.client_ip()):
-                    return self._login("Muitas tentativas erradas. Espere 15 minutos.")
-                u = usuarios.entrar(form.get("usuario", [""])[0], senha)
-                _limitar_login(self.client_ip(), falhou=u is None)
-                if not u:
-                    return self._login("Usuário ou senha incorretos.")
-                comum.log("Login no sistema online: %s" % u["login"])
-                self.send_response(303)
-                self.send_header("Set-Cookie", "rv_sessao=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d; Secure"
-                                 % (usuarios.sessao_nova(u), usuarios.DURACAO))
-                self.send_header("Location", "/")
-                self.send_header("Content-Length", "0")
-                self.end_headers()
-                return
-            usuario_ok = True
-            certo = usuario_ok and r and r.papel() == "servidor" and r.token() and hmac.compare_digest(r.token(senha), r.token())
-            if comum.NUVEM:
-                _limitar_login(self.client_ip(), falhou=not certo)
-            if certo:
-                self.send_response(303)
-                self.send_header("Set-Cookie", "rv_token=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000%s"
-                                 % (r.token(), "; Secure" if comum.NUVEM else ""))
-                self.send_header("Location", "/")
-                self.send_header("Content-Length", "0")
-                self.end_headers()
-                return
-            return self._login("Usuário ou senha incorretos.")
+            if _limitar_login(self.client_ip()):
+                return self._login("Muitas tentativas erradas. Espere 15 minutos.")
+            u = usuarios.entrar(form.get("usuario", [""])[0], form.get("senha", [""])[0])
+            _limitar_login(self.client_ip(), falhou=u is None)
+            if not u:
+                return self._login("Usuário ou senha incorretos.")
+            comum.log("Login no sistema online: %s" % u["login"])
+            self.send_response(303)
+            self.send_header("Set-Cookie", "rv_sessao=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d; Secure"
+                             % (usuarios.sessao_nova(u), usuarios.DURACAO))
+            self.send_header("Location", "/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if not self._permitido() or self.headers.get("X-Painel") != "1":
-            return self._enviar(403 if self._local() else 401, {"erro": "requisição não permitida"})
-        remoto = self._remoto()
-        if remoto and caminho in SO_LOCAL:
-            return self._enviar(200, {"ok": False, "erro": "Essa ação só pode ser feita no próprio computador principal."})
-        if remoto and caminho in NO_CHROME_DAQUI:
-            return self._enviar(200, {"ok": False, "erro": "Essa conta baixa no computador principal: faça isso lá (o Chrome dela está naquele computador)."})
+            return self._enviar(401, {"erro": "requisição não permitida"})
         quem, usuario, pc = self._identidade()
         if caminho.startswith("/api/usuarios/"):
             return self._enviar(200, self._usuarios(caminho))
-        if caminho == "/api/agente/ping":
-            acao = lambda d: agente_ping(d, self.client_address[0])
-        elif caminho == "/api/presenca":
+        if caminho == "/api/presenca":
             acao = lambda d: _atividade().presenca(quem, usuario, pc, d)
         elif caminho == "/api/presenca/sair":
             acao = lambda d: _atividade().sair(quem)
@@ -2198,47 +1720,31 @@ class Handler(BaseHTTPRequestHandler):
         try:
             tam = int(self.headers.get("Content-Length") or 0)
             dados = json.loads(self.rfile.read(tam) or b"{}") if tam else {}
-            if remoto:
-                dados["_remoto"] = True
-                dados["estacao"] = pc
+            dados["_por"] = usuario
             at = _atividade()
             desc = at.descrever(caminho, dados, comum.carregar_config()) if at else None
+            t0 = time.time()
             if desc:
                 conf = at.conflito(desc, quem)
                 if conf:
                     return self._enviar(200, {"ok": False, "erro": conf, "conflito": True})
-                return self._enviar(200, at.executar(desc, quem, usuario, pc, lambda: acao(dados)))
-            return self._enviar(200, acao(dados))
+                resp = at.executar(desc, quem, usuario, pc, lambda: acao(dados))
+            else:
+                resp = acao(dados)
         except Exception as e:
             traceback.print_exc()
             return self._enviar(500, {"ok": False, "erro": "Erro interno: %s" % e})
+        if time.time() - t0 > 1:           # trabalho pesado (planilhas): devolve a memória antes de responder
+            comum.devolver_memoria()
+        return self._enviar(200, resp)
 
 
-ML_ANTIGO = ("No menu do vendedor, entre em Vendas. Use a opção de baixar o relatório de vendas em Excel (botão de download/exportar "
-             "da lista de vendas). Escolha período personalizado de INICIO até FIM, gere e baixe o arquivo .xlsx.")
-ML_NOVO = ("Na página de Vendas, PRIMEIRO filtre o período: abra o filtro de data, escolha período personalizado de INICIO até FIM e aplique o filtro. "
-           "Confira que a lista mostra o período certo. Só então clique no botão de download (baixar/exportar) da lista de vendas. "
-           "No canto inferior direito da tela vai aparecer um aviso com o relatório sendo gerado (carregando). Não saia da página: aguarde até o aviso "
-           "indicar que está pronto (confira a cada 30 segundos, no máximo 10 minutos) e clique em Baixar nesse aviso para baixar o arquivo .xlsx.")
-
-
-MG_ANTIGO = "Abra a lista de pedidos do portal do seller. Filtre pelo período de INICIO até FIM, use a opção de exportar o relatório de pedidos/vendas e baixe."
-MG_NOVO = 'Abra a lista de pedidos do portal do seller. Filtre pelo período de INICIO até FIM e use a opção de exportar o relatório de pedidos/vendas. A Magalu gera o arquivo em segundo plano: depois de pedir a exportação, abra https://seller.magalu.com/central-arquivos (Central de Arquivos), aguarde o relatório que você acabou de pedir ficar pronto (atualize a página a cada 30 segundos, no máximo 15 minutos) e clique para baixar o .zip. Baixe só o arquivo gerado agora (o mais recente), não arquivos antigos. Não extraia nem abra o .zip.'
-
-
-AMZ_ANTIGO = "Abra o menu Relatórios > Fulfillment (ou Pedidos > Relatórios de pedidos se a loja só tiver envio próprio)"
-AMZ_NOVO = "Baixe 3 relatórios do período de INICIO até FIM, um de cada vez (aguarde cada um ficar pronto: confira a cada 30 segundos, no máximo 15 minutos):\n1) PEDIDOS: menu Relatórios > Fulfillment (ou Pedidos > Relatórios de pedidos se a loja só tiver envio próprio), relatório 'Todos os pedidos' (All Orders), 'Data exata' de INICIO até FIM, Solicitar download e baixe o arquivo .txt original (NÃO escolha Excel).\n2) RELATÓRIO DE TRANSAÇÕES UNIFICADO: menu Pagamentos > Biblioteca de relatórios > Relatórios por período (Transação / Custom Unified Transaction), período de INICIO até FIM, gere e baixe o .csv.\n3) TRANSAÇÕES A RECEBER: menu Pagamentos > Visualizar transações, filtre o período de INICIO até FIM e baixe o .csv."
-AMZ_FONTE = 'Seller Central Brasil. São 3 relatórios: Todos os pedidos (.txt), relatório de transações unificado (.csv) e transações a receber (.csv) — o tratador precisa dos três. Caminhos dos menus a confirmar no 1º teste.'
-MG_EXTRA = ' O .zip completo vem com dois arquivos dentro (pedidos e pacotes): é esse que deve ser baixado.'
 PADRAO_AUX = {
     "amazon-unificado": {
         "nome": "Amazon — relatório unificado",
         "oculto": True,
         "pai": "amazon",
         "extensao": ".csv",
-        "link": "",
-        "link_status": "",
-        "link_fonte": "",
         "padroes_nome": [
             "customunifiedtransaction",
             "unified.?transaction",
@@ -2251,17 +1757,13 @@ PADRAO_AUX = {
             "creditos de remessa",
             "tarifas de venda",
             "taxas fba"
-        ],
-        "instrucoes": ""
+        ]
     },
     "amazon-receber": {
         "nome": "Amazon — transações a receber",
         "oculto": True,
         "pai": "amazon",
         "extensao": ".csv",
-        "link": "",
-        "link_status": "",
-        "link_fonte": "",
         "padroes_nome": [
             "transacoes.?a.?receber",
             "a.?receber"
@@ -2271,14 +1773,13 @@ PADRAO_AUX = {
             "id do pedido",
             "detalhes do produto",
             "tarifas da amazon"
-        ],
-        "instrucoes": ""
+        ]
     }
 }
 
 
 def _migrar(cfg):
-    """Atualiza instruções padrão antigas (só se você ainda não tiver editado)."""
+    """Atualiza cadastros antigos (contas, custos por mês, marketplaces novos)."""
     with open(comum.ARQ_CONFIG, "r", encoding="utf-8") as f:
         mudou = any("contas" not in c for c in json.load(f).get("clientes", []))  # cadastro antigo -> grupos com contas
     # tabela de custos única -> tabela do mês em que foi enviada (vale para os meses seguintes até ter outra)
@@ -2293,11 +1794,6 @@ def _migrar(cfg):
             k = dict(k, mes=mes, versao=1)
             c["custos_meses"] = {mes: k}
             c["custos"] = k
-            mudou = True
-    for mk, antigo, novo in (("mercadolivre", ML_ANTIGO, ML_NOVO), ("magalu", MG_ANTIGO, MG_NOVO)):
-        m = cfg.get("marketplaces", {}).get(mk)
-        if m and m.get("instrucoes", "").startswith(antigo):
-            m["instrucoes"] = novo
             mudou = True
     mks = cfg.setdefault("marketplaces", {})
     for k, v in comum.MARKETPLACES_NOVOS.items():   # Temu, Via Varejo, Madeira Madeira, Site
@@ -2323,24 +1819,17 @@ def _migrar(cfg):
         if k not in mks:
             mks[k] = PADRAO_AUX[k]
             mudou = True
-    amz = mks.get("amazon")
-    if amz and amz.get("instrucoes", "").startswith(AMZ_ANTIGO):
-        amz["instrucoes"] = AMZ_NOVO
-        amz["link_fonte"] = AMZ_FONTE
-        mudou = True
-    mg = mks.get("magalu")
-    if mg and mg.get("instrucoes", "") == MG_NOVO:
-        mg["instrucoes"] = MG_NOVO + MG_EXTRA
-        mudou = True
     if "tratamento" not in cfg:
         cfg["tratamento"] = {"automatico": True, "imposto_padrao": 0.14}
         mudou = True
-    ex = cfg.setdefault("execucao", {})
-    if "modelo_reforco" not in ex:  # configuração anterior às otimizações
-        if not ex.get("modelo"):
-            ex["modelo"] = "sonnet"
-        ex["modelo_reforco"] = ""
-        mudou = True
+    if any(k in cfg for k in comum.CHAVES_DOWNLOAD_CFG):
+        # primeira vez sem o download automático: guarda o cadastro antigo antes de limpar
+        destino = os.path.join(comum.pasta_dados(cfg, "backups"), "config_antes_sem_download.json")
+        if not os.path.exists(destino):
+            os.makedirs(os.path.dirname(destino), exist_ok=True)
+            import shutil
+            shutil.copy2(comum.ARQ_CONFIG, destino)
+    mudou |= comum.limpar_download(cfg)
     if mudou:
         comum.salvar_config(cfg)
 
@@ -2367,13 +1856,11 @@ def _limitar_login(ip, falhou=None):
 def admin_importar(dados):
     """Recebe em partes o .zip gerado no computador (exportar_nuvem.py) e, na última parte, coloca os dados no disco:
     sistema/... -> pasta do sistema (config, dados) e raiz/... -> pasta dos relatórios. Caminhos do Windows guardados
-    nos .json passam a apontar para as pastas daqui; contas sem computador ficam com a estação indicada."""
+    nos .json passam a apontar para as pastas daqui."""
     import base64
     import re as _re
     import shutil
     import zipfile
-    if not comum.NUVEM:
-        return {"ok": False, "erro": "Importação só existe no sistema online."}
     ident = _re.sub(r"[^\w-]", "", str(dados.get("id") or ""))[:40]
     parte, total = int(dados.get("parte") or 0), int(dados.get("total") or 0)
     if not ident or total < 1 or not (0 <= parte < total):
@@ -2457,22 +1944,13 @@ def admin_importar(dados):
                     trocados += 1
             except (OSError, ValueError):
                 pass
-    estacao = str(dados.get("estacao_padrao") or man.get("estacao") or "").strip()
     with TRAVA_CONFIG:
         cfg = comum.carregar_config()
-        cfg = trocar(cfg)
-        sem = 0
-        for c in cfg.get("clientes", []):
-            for u in c.get("contas", []):
-                if estacao and not u.get("computador"):
-                    u["computador"] = estacao
-                    sem += 1
-        comum.salvar_config(cfg)
+        comum.salvar_config(trocar(cfg))
     os.remove(arq)
-    comum.log("Importação do computador: %d arquivo(s); %d .json ajustados; %d conta(s) passaram para '%s'."
-              % (n, trocados, sem, estacao))
+    comum.log("Importação do computador: %d arquivo(s); %d .json ajustados." % (n, trocados))
     threading.Thread(target=_aquecer_painel, args=(5,), daemon=True).start()
-    return {"ok": True, "fim": True, "arquivos": n, "json_ajustados": trocados, "contas_para_estacao": sem, "estacao": estacao}
+    return {"ok": True, "fim": True, "arquivos": n, "json_ajustados": trocados}
 
 
 ACOES["/api/admin/importar"] = admin_importar
@@ -2485,32 +1963,30 @@ def _aquecer_painel(espera=0):
     painel_dados.aquecer()
 
 
+def _ao_iniciar():
+    """Trabalhos de quando o sistema liga, um depois do outro (juntos, estouravam a memória do plano online)."""
+    _reprocessar_antigos()
+    _retratar_regra_nao_vendas()
+    comum.devolver_memoria()
+    _aquecer_painel(20)
+    comum.devolver_memoria()
+
+
+class Servidor(ThreadingHTTPServer):
+    daemon_threads = True            # pedidos em andamento não seguram o desligamento (novo deploy)
+    request_queue_size = 64
+
+
 def criar_servidor(cfg=None):
     cfg = cfg or comum.carregar_config()
     with TRAVA_CONFIG:
         _migrar(cfg)
     comum.criar_pastas_base(cfg)
-    threading.Thread(target=_reprocessar_antigos, daemon=True).start()
-    r = _rede()
-    papel = r.papel() if r else "sozinho"
-    if papel == "estacao":
-        import estacao
-        return estacao.criar_servidor(cfg)
-    threading.Thread(target=_retratar_regra_nao_vendas, daemon=True).start()
-    if comum.NUVEM:
-        threading.Thread(target=_aquecer_painel, args=(30,), daemon=True).start()
-    host = "0.0.0.0" if papel == "servidor" else "127.0.0.1"   # servidor: aceita a rede (com senha)
-    porta = int(os.environ.get("PORT") or 0) if comum.NUVEM else 0
-    return ThreadingHTTPServer((host, porta or int(cfg.get("porta_painel", 8765))), Handler)
+    threading.Thread(target=_ao_iniciar, daemon=True).start()
+    return Servidor(("0.0.0.0", int(os.environ.get("PORT") or cfg.get("porta_painel", 10000))), Handler)
 
 
 def main():
-    if sys.stdout is None or sys.stderr is None:  # pythonw: sem console
-        pasta = os.path.join(comum.PASTA_SISTEMA, "logs")
-        os.makedirs(pasta, exist_ok=True)
-        saida = open(os.path.join(pasta, "painel.log"), "a", encoding="utf-8", buffering=1)
-        sys.stdout = sys.stdout or saida
-        sys.stderr = sys.stderr or saida
     srv = criar_servidor()
     print("Painel em http://localhost:%d" % srv.server_address[1])
     srv.serve_forever()

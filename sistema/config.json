@@ -3,23 +3,10 @@
   "pasta_raiz": "C:\\Relatórios",
   "pasta_entrada": "_entrada",
   "porta_painel": 8765,
-  "chrome_user_data": "",
-  "chrome_exe": "",
-  "horarios": {
-    "abrir_chrome": "04:50",
-    "inicio_atalhos": "05:00",
-    "intervalo_entre_perfis_min": 5,
-    "organizador_inicio": "05:00",
-    "organizador_fim": "08:00",
-    "organizador_intervalo_min": 15
-  },
   "marketplaces": {
     "mercadolivre": {
       "nome": "Mercado Livre",
       "extensao": ".xlsx",
-      "link": "https://www.mercadolivre.com.br/vendas/omni/lista",
-      "link_status": "a confirmar no 1º teste",
-      "link_fonte": "Página 'Vendas' do painel do vendedor (o Mercado Livre não publica um link direto de exportação; confirme e ajuste se abrir outra página).",
       "padroes_nome": [
         "mercado.?livre",
         "meli",
@@ -34,15 +21,11 @@
         "# de anuncio",
         "tarifa de venda",
         "titulo do anuncio"
-      ],
-      "instrucoes": "Na página de Vendas, PRIMEIRO filtre o período: abra o filtro de data, escolha período personalizado de INICIO até FIM e aplique o filtro. Confira que a lista mostra o período certo. Só então clique no botão de download (baixar/exportar) da lista de vendas. No canto inferior direito da tela vai aparecer um aviso com o relatório sendo gerado (carregando). Não saia da página: aguarde até o aviso indicar que está pronto (confira a cada 30 segundos, no máximo 10 minutos) e clique em Baixar nesse aviso para baixar o arquivo .xlsx."
+      ]
     },
     "shopee": {
       "nome": "Shopee",
       "extensao": ".xlsx",
-      "link": "https://seller.shopee.com.br/portal/sale/order",
-      "link_status": "a confirmar no 1º teste",
-      "link_fonte": "Central do Vendedor > Pedido > Meus Pedidos > Exportar; relatórios prontos em Histórico de Exportes > Meus Relatórios (Centro de Educação do Vendedor Shopee, artigo 13390).",
       "padroes_nome": [
         "shopee",
         "order\\.all",
@@ -55,15 +38,11 @@
         "taxa de comissao",
         "cupom shopee",
         "moedas shopee"
-      ],
-      "instrucoes": "Vá em Pedido > Meus Pedidos, aba Todos. Clique em Exportar, escolha o período de criação do pedido de INICIO até FIM e confirme. O arquivo é gerado em segundo plano: abra Histórico de Exportes / Meus Relatórios, aguarde o relatório ficar pronto (atualize a cada 30 segundos, no máximo 10 minutos) e clique em Baixar. O formato deve ser Excel (.xlsx)."
+      ]
     },
     "amazon": {
       "nome": "Amazon",
       "extensao": ".xlsx",
-      "link": "https://sellercentral.amazon.com.br/",
-      "link_status": "a confirmar no 1º teste",
-      "link_fonte": "Seller Central Brasil. São 3 relatórios: Todos os pedidos (.txt), relatório de transações unificado (.csv) e transações a receber (.csv) — o tratador precisa dos três. Caminhos dos menus a confirmar no 1º teste.",
       "padroes_nome": [
         "amazon",
         "all.?orders",
@@ -77,15 +56,11 @@
         "fulfillment-channel",
         "sales-channel",
         "amazon.com.br"
-      ],
-      "instrucoes": "Baixe 3 relatórios do período de INICIO até FIM, um de cada vez (aguarde cada um ficar pronto: confira a cada 30 segundos, no máximo 15 minutos):\n1) PEDIDOS: menu Relatórios > Fulfillment (ou Pedidos > Relatórios de pedidos se a loja só tiver envio próprio), relatório 'Todos os pedidos' (All Orders), 'Data exata' de INICIO até FIM, Solicitar download e baixe o arquivo .txt original (NÃO escolha Excel).\n2) RELATÓRIO DE TRANSAÇÕES UNIFICADO: menu Pagamentos > Biblioteca de relatórios > Relatórios por período (Transação / Custom Unified Transaction), período de INICIO até FIM, gere e baixe o .csv.\n3) TRANSAÇÕES A RECEBER: menu Pagamentos > Visualizar transações, filtre o período de INICIO até FIM e baixe o .csv."
+      ]
     },
     "magalu": {
       "nome": "Magalu",
       "extensao": ".zip",
-      "link": "https://seller.magalu.com",
-      "link_status": "base verificada; página de pedidos a confirmar",
-      "link_fonte": "Login do Magalu Marketplace: seller.magalu.com. Lojas 'Parceiro Magalu' usam parceiro.magalu.com — ajuste o link no cadastro do cliente se for o caso.",
       "padroes_nome": [
         "magalu",
         "magazine",
@@ -94,15 +69,11 @@
       "palavras_conteudo": [
         "magalu",
         "magazine luiza"
-      ],
-      "instrucoes": "Abra a lista de pedidos do portal do seller. Filtre pelo período de INICIO até FIM e use a opção de exportar o relatório de pedidos/vendas. A Magalu gera o arquivo em segundo plano: depois de pedir a exportação, abra https://seller.magalu.com/central-arquivos (Central de Arquivos), aguarde o relatório que você acabou de pedir ficar pronto (atualize a página a cada 30 segundos, no máximo 15 minutos) e clique para baixar o .zip. Baixe só o arquivo gerado agora (o mais recente), não arquivos antigos. Não extraia nem abra o .zip. O .zip completo vem com dois arquivos dentro (pedidos e pacotes): é esse que deve ser baixado."
+      ]
     },
     "tiktokshop": {
       "nome": "TikTok Shop",
       "extensao": ".xlsx",
-      "link": "https://seller-br.tiktok.com/order",
-      "link_status": "verificado",
-      "link_fonte": "TikTok Shop Academy (Brasil), artigo 'Gerenciamento de Pedidos': Pedidos > Gerenciar pedidos.",
       "padroes_nome": [
         "tiktok",
         "tik.?tok"
@@ -114,17 +85,13 @@
         "buyer username",
         "created time",
         "nome de usuario do comprador"
-      ],
-      "instrucoes": "Em Pedidos > Gerenciar pedidos, fique na aba Todos. Filtre por data de criação de INICIO até FIM. Clique em Exportar, escolha 'pedidos filtrados' e formato Excel. Aguarde no histórico de exportação o arquivo ficar pronto (atualize a cada 30 segundos, no máximo 10 minutos) e baixe."
+      ]
     },
     "amazon-unificado": {
       "nome": "Amazon — relatório unificado",
       "oculto": true,
       "pai": "amazon",
       "extensao": ".csv",
-      "link": "",
-      "link_status": "",
-      "link_fonte": "",
       "padroes_nome": [
         "customunifiedtransaction",
         "unified.?transaction",
@@ -137,17 +104,13 @@
         "creditos de remessa",
         "tarifas de venda",
         "taxas fba"
-      ],
-      "instrucoes": ""
+      ]
     },
     "amazon-receber": {
       "nome": "Amazon — transações a receber",
       "oculto": true,
       "pai": "amazon",
       "extensao": ".csv",
-      "link": "",
-      "link_status": "",
-      "link_fonte": "",
       "padroes_nome": [
         "transacoes.?a.?receber",
         "a.?receber"
@@ -157,8 +120,7 @@
         "id do pedido",
         "detalhes do produto",
         "tarifas da amazon"
-      ],
-      "instrucoes": ""
+      ]
     },
     "temu": {
       "nome": "Temu",
@@ -169,11 +131,6 @@
         "temu"
       ],
       "extensao": ".xlsx",
-      "link": "",
-      "link_status": "a definir",
-      "link_fonte": "Ainda não definido: por enquanto o relatório é subido pelo app (Vendas > Subir relatório).",
-      "instrucoes": "",
-      "sem_download": true,
       "sem_tratador": true
     },
     "viavarejo": {
@@ -188,11 +145,6 @@
         "casas bahia"
       ],
       "extensao": ".xlsx",
-      "link": "",
-      "link_status": "a definir",
-      "link_fonte": "Ainda não definido: por enquanto o relatório é subido pelo app (Vendas > Subir relatório).",
-      "instrucoes": "",
-      "sem_download": true,
       "sem_tratador": true
     },
     "madeiramadeira": {
@@ -205,11 +157,6 @@
         "madeira madeira"
       ],
       "extensao": ".xlsx",
-      "link": "",
-      "link_status": "a definir",
-      "link_fonte": "Ainda não definido: por enquanto o relatório é subido pelo app (Vendas > Subir relatório).",
-      "instrucoes": "",
-      "sem_download": true,
       "sem_tratador": true
     },
     "site": {
@@ -221,26 +168,10 @@
       ],
       "palavras_conteudo": [],
       "extensao": ".xlsx",
-      "link": "",
-      "link_status": "a definir",
-      "link_fonte": "Ainda não definido: por enquanto o relatório é subido pelo app (Vendas > Subir relatório).",
-      "instrucoes": "",
-      "sem_download": true,
       "sem_tratador": true
     }
   },
   "clientes": [],
-  "claude_exe": "",
-  "execucao": {
-    "modelo": "sonnet",
-    "limite_minutos_por_cliente": 40,
-    "max_turnos": 200,
-    "espera_chrome_seg": 15,
-    "espera_download_seg": 30,
-    "modelo_reforco": "",
-    "modo_paralelo": true,
-    "agendado": false
-  },
   "tratamento": {
     "automatico": true,
     "imposto_padrao": 0.14

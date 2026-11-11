@@ -76,6 +76,14 @@ def _admin_env():
     return (os.environ.get("ADMIN_USUARIO") or "admin").strip().lower(), os.environ.get("ADMIN_SENHA") or ""
 
 
+def login_admin():
+    return _admin_env()[0]
+
+
+def senha_admin():
+    return _admin_env()[1]
+
+
 def _versao_env():
     return hashlib.sha256(("env:" + _admin_env()[1]).encode("utf-8")).hexdigest()[:12]
 

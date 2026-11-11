@@ -18,6 +18,7 @@ import glob
 import os
 import re
 import shutil
+import threading
 import unicodedata
 
 import comum
@@ -1959,7 +1960,40 @@ def dias_esperados(ano, mes, hoje=None):
     return [dt.date(ano, mes, d) for d in range(1, ult.day + 1)]
 
 
+_SEM = object()                  # "coluna ausente nesta linha" (para devolver o dicionário igual ao lido)
+_CACHE_PADRAO = {}               # (arquivo, tipo) -> (mtime_ns, tamanho, cabeçalho, linhas já convertidas)
+_CACHE_MAX_LINHAS = 300000
+_TRAVA_PADRAO = threading.Lock()
+
+
 def _ler_padrao(p, tipo):
+    """Linhas do arquivo padronizado (lista de dicionários novos a cada chamada).
+
+    A leitura do .xlsx fica em memória enquanto o arquivo não muda: a tela pede a situação do mês a cada minuto
+    e, sem isso, todas as planilhas de ADS/afiliados/visitas eram abertas de novo a cada vez."""
+    st = os.stat(p)
+    chave = (os.path.abspath(p), tipo)
+    with _TRAVA_PADRAO:
+        c = _CACHE_PADRAO.get(chave)
+    if not c or c[0] != st.st_mtime_ns or c[1] != st.st_size:
+        cab, linhas = _ler_padrao_arquivo(p, tipo)
+        c = (st.st_mtime_ns, st.st_size, cab, linhas)
+        with _TRAVA_PADRAO:
+            _CACHE_PADRAO.pop(chave, None)
+            _CACHE_PADRAO[chave] = c
+            total = sum(len(x[3]) for x in _CACHE_PADRAO.values())
+            while total > _CACHE_MAX_LINHAS and len(_CACHE_PADRAO) > 1:
+                velho = next(iter(_CACHE_PADRAO))
+                total -= len(_CACHE_PADRAO.pop(velho)[3])
+    else:
+        with _TRAVA_PADRAO:          # usado agora: vai para o fim da fila (sai por último)
+            _CACHE_PADRAO.pop(chave, None)
+            _CACHE_PADRAO[chave] = c
+    cab = c[2]
+    return [{k: v for k, v in zip(cab, r) if v is not _SEM} for r in c[3]]
+
+
+def _ler_padrao_arquivo(p, tipo):
     from openpyxl import load_workbook
     wb = load_workbook(p, read_only=True, data_only=True)
     try:
@@ -1978,7 +2012,8 @@ def _ler_padrao(p, tipo):
             if c in d:
                 d[c] = _texto(d[c])
         itens.append(d)
-    return itens
+    cab_final = list(dict.fromkeys(k for d in itens for k in d)) if itens else cab
+    return cab_final, [tuple(d.get(k, _SEM) for k in cab_final) for d in itens]
 
 
 def carregar(cfg, cliente, tipo, ano, mes):

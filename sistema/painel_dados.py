@@ -36,17 +36,6 @@ _PASTA_CACHE = os.path.join(comum.PASTA_SISTEMA, "dados", "cache_painel")
 _VERSAO_CACHE = 1
 
 
-def _devolver_memoria():
-    """Depois de ler um .xlsx grande, devolve ao sistema a memória que o pandas já soltou (Linux/Render)."""
-    import gc
-    gc.collect()
-    try:
-        import ctypes
-        ctypes.CDLL("libc.so.6").malloc_trim(0)
-    except (OSError, AttributeError):
-        pass
-
-
 def _vazio(v):
     return None if v is None or (isinstance(v, str) and not v.strip()) or (isinstance(v, float) and v != v) else v
 
@@ -214,7 +203,7 @@ def _ler(caminho):
                 t[col] = t[col].cat.remove_unused_categories()
         real.attrs["desc"] = desc
         del soma
-        _devolver_memoria()
+        comum.devolver_memoria()
         _para_disco(caminho, mt, real, fc)
         with _TRAVA:
             _CACHE[caminho] = (mt, real, fc)
