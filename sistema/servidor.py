@@ -1834,6 +1834,42 @@ NO_CHROME_DAQUI = {"/api/abrir-no-perfil", "/api/abrir-chrome", "/api/downloads"
 
 
 
+PAGINA_LOGIN = """<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Relatórios de Vendas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f5f9;--card:#fff;--tx:#141a26;--mut:#5d6779;--li:#dfe4ec;--pri:#2c5bd9;--pri2:#1f46b3;--err:#b42318;--errbg:#fdecea}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1320;--card:#151d2c;--tx:#e8edf6;--mut:#94a0b6;--li:#26324a;--pri:#5b8cff;--pri2:#4a78e8;--err:#ff8a80;--errbg:#3a1d1f}}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;font-family:Inter,Segoe UI,system-ui,sans-serif;background:var(--bg);color:var(--tx);display:grid;place-items:center;padding:16px;
+  background-image:radial-gradient(circle at 15% 20%,color-mix(in srgb,var(--pri) 14%,transparent),transparent 40%),radial-gradient(circle at 85% 80%,color-mix(in srgb,var(--pri) 10%,transparent),transparent 45%)}
+.card{width:100%;max-width:380px;background:var(--card);border:1px solid var(--li);border-radius:16px;padding:32px 28px;box-shadow:0 20px 50px -20px rgba(15,25,50,.35)}
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.logo i{width:42px;height:42px;border-radius:11px;background:var(--pri);display:grid;place-items:center}
+.logo svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round}
+.logo b{font-size:18px;display:block}.logo span{font-size:13px;color:var(--mut)}
+h1{font-size:22px;margin:0 0 4px}p.sub{margin:0 0 22px;color:var(--mut);font-size:14px}
+label{display:block;font-size:13px;font-weight:600;margin:0 0 6px}
+input{width:100%;font:inherit;font-size:15px;padding:11px 12px;border:1px solid var(--li);border-radius:10px;background:transparent;color:var(--tx);margin-bottom:16px;outline:none}
+input:focus{border-color:var(--pri);box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 22%,transparent)}
+.senha{position:relative}.senha button{position:absolute;right:8px;top:7px;border:0;background:none;color:var(--mut);font:inherit;font-size:12px;cursor:pointer;padding:6px}
+button.entrar{width:100%;font:inherit;font-weight:600;font-size:15px;padding:12px;border:0;border-radius:10px;background:var(--pri);color:#fff;cursor:pointer}
+button.entrar:hover{background:var(--pri2)}
+.erro{background:var(--errbg);color:var(--err);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:16px}
+.erro:empty{display:none}.rodape{margin-top:18px;text-align:center;font-size:12px;color:var(--mut)}
+</style></head><body><main class="card">
+<div class="logo"><i><svg viewBox="0 0 24 24"><path d="M5 19V11M10 19V6M15 19v-6M20 19V9"/></svg></i><div><b>Relatórios de Vendas</b><span>Marketplaces</span></div></div>
+<h1>Entrar</h1><p class="sub">Use o seu usuário e a sua senha.</p>
+<div class="erro">{ERRO}</div>
+<form method="post" action="/login">
+<label for="u">Usuário</label><input id="u" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+<label for="s">Senha</label><div class="senha"><input id="s" type="password" name="senha" autocomplete="current-password" required>
+<button type="button" onclick="var i=document.getElementById('s');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'mostrar':'ocultar'">mostrar</button></div>
+<button class="entrar">Entrar</button></form>
+<div class="rodape">Esqueceu a senha? Peça ao admin para criar uma nova.</div>
+</main></body></html>"""
+
+
 # ---------------------------------------------------------------- HTTP
 class Handler(BaseHTTPRequestHandler):
     server_version = "PainelRelatorios/1.0"
@@ -1850,7 +1886,22 @@ class Handler(BaseHTTPRequestHandler):
         porta = self.server.server_address[1]
         return self.headers.get("Host", "") in ("localhost:%d" % porta, "127.0.0.1:%d" % porta)
 
+    def _sessao_ok(self):
+        """Online: cookie de sessão de um usuário (login e senha próprios)."""
+        self._usuario = None
+        if not comum.NUVEM:
+            return False
+        import usuarios
+        for parte in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = parte.strip().partition("=")
+            if k == "rv_sessao":
+                self._usuario = usuarios.sessao(v)
+                return self._usuario is not None
+        return False
+
     def _token_ok(self):
+        if self._sessao_ok():
+            return True
         r = _rede()
         if not r or r.papel() != "servidor":
             return False
@@ -1876,7 +1927,8 @@ class Handler(BaseHTTPRequestHandler):
             if _limitar_login(ip):
                 return False
             ok = self._token_ok()
-            if not ok and ("Bearer " in (self.headers.get("Authorization") or "") or "rv_token=" in (self.headers.get("Cookie") or "")):
+            if not ok and ("Bearer " in (self.headers.get("Authorization") or "") or "rv_token=" in (self.headers.get("Cookie") or "")
+                           or "rv_sessao=" in (self.headers.get("Cookie") or "")):
                 _limitar_login(ip, falhou=True)      # chave errada também conta como tentativa
             return ok
         return not self._local() and self._token_ok()
@@ -1890,6 +1942,9 @@ class Handler(BaseHTTPRequestHandler):
     def _identidade(self):
         """(quem, nome da pessoa, computador) de quem fez o pedido."""
         from urllib.parse import unquote
+        u = getattr(self, "_usuario", None)
+        if u:
+            return "web|%s" % u["login"], u.get("nome") or u["login"], "online"
         if self._remoto():
             pc = unquote(self.headers.get("X-Estacao") or "") or ("navegador " + self.client_address[0])
             usuario = unquote(self.headers.get("X-Usuario") or "") or pc
@@ -1903,18 +1958,44 @@ class Handler(BaseHTTPRequestHandler):
         if comum.NUVEM:
             if not os.environ.get("ADMIN_SENHA"):
                 erro = erro or "Senha do admin ainda não definida (variável ADMIN_SENHA no Render)."
-            corpo = ("<h1>Relatórios de Vendas</h1><p>Entre com o usuário e a senha do admin.</p>"
-                     "<form method='post' action='/login' style='display:grid;gap:10px;max-width:280px'>"
-                     "<input name='usuario' placeholder='Usuário' autocomplete='username' autofocus style='font-size:1.1em;padding:8px'>"
-                     "<input type='password' name='senha' placeholder='Senha' autocomplete='current-password' style='font-size:1.1em;padding:8px'>"
-                     "<button style='font-size:1.1em;padding:8px 16px'>Entrar</button></form>"
-                     "<p style='color:#b42318'>%s</p>" % html.escape(erro))
-            return self._enviar(200 if not erro else 401, self._pagina("Entrar", corpo), "text/html; charset=utf-8")
+            return self._enviar(200 if not erro else 401, PAGINA_LOGIN.replace("{ERRO}", html.escape(erro)),
+                                "text/html; charset=utf-8")
         corpo = ("<h1>Relatórios de Vendas</h1><p>Este é o computador principal. Digite a senha da rede para entrar.</p>"
                  "<form method='post' action='/login'><input type='password' name='senha' autofocus "
                  "style='font-size:1.1em;padding:8px;width:240px'> <button style='font-size:1.1em;padding:8px 16px'>Entrar</button></form>"
                  "<p style='color:#b42318'>%s</p>" % html.escape(erro))
         return self._enviar(200 if not erro else 401, self._pagina("Entrar", corpo), "text/html; charset=utf-8")
+
+    def _usuarios(self, caminho):
+        """Cadastro de usuários do online (admin) e troca da própria senha (todos)."""
+        import usuarios
+        u = getattr(self, "_usuario", None)
+        tam = int(self.headers.get("Content-Length") or 0)
+        dados = json.loads(self.rfile.read(tam) or b"{}") if tam else {}
+        if not comum.NUVEM or not u:
+            return {"ok": False, "erro": "Disponível só no sistema online, com login."}
+        try:
+            if caminho == "/api/usuarios/minha-senha":
+                usuarios.trocar_minha_senha(u["login"], dados.get("atual"), dados.get("nova"))
+                comum.log("Usuário %s trocou a própria senha." % u["login"])
+                return {"ok": True}
+            if u.get("perfil") != "admin":
+                return {"ok": False, "erro": "Só um admin pode cadastrar usuários."}
+            if caminho == "/api/usuarios/listar":
+                return {"ok": True, "usuarios": usuarios.listar()}
+            if caminho == "/api/usuarios/salvar":
+                r = usuarios.salvar(dados, u["login"])
+                comum.log("Usuário %s salvo por %s." % (r["login"], u["login"]))
+                return {"ok": True, "usuario": r}
+            if caminho == "/api/usuarios/remover":
+                if (dados.get("login") or "").lower() == u["login"]:
+                    return {"ok": False, "erro": "Você não pode remover o seu próprio usuário."}
+                ok = usuarios.remover(dados.get("login"))
+                comum.log("Usuário %s removido por %s." % (dados.get("login"), u["login"]))
+                return {"ok": ok}
+        except ValueError as e:
+            return {"ok": False, "erro": str(e)}
+        return {"ok": False, "erro": "ação desconhecida"}
 
     def _enviar(self, codigo, corpo, tipo="application/json; charset=utf-8"):
         if isinstance(corpo, (dict, list)):
@@ -1942,6 +2023,8 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/sair":
             self.send_response(303)
             self.send_header("Set-Cookie", "rv_token=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" + ("; Secure" if comum.NUVEM else ""))
+            if comum.NUVEM:
+                self.send_header("Set-Cookie", "rv_sessao=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure")
             self.send_header("Location", "/")
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -2006,12 +2089,18 @@ class Handler(BaseHTTPRequestHandler):
                 est = montar_estado(q.get("mes"))
                 quem, usuario, pc = self._identidade()
                 est["eu"] = {"quem": quem, "usuario": usuario, "pc": pc}
+                u = getattr(self, "_usuario", None)
+                if u:
+                    est["eu"].update(login=u["login"], admin=u.get("perfil") == "admin", principal=bool(u.get("principal")))
                 return self._enviar(200, est)
             if url.path == "/api/equipe":
                 at = _atividade()
                 quem, usuario, pc = self._identidade()
-                return self._enviar(200, {"quadro": at.quadro(comum.carregar_config()), "recentes": at.recentes(30),
-                                          "eu": {"quem": quem, "usuario": usuario, "pc": pc}})
+                eu = {"quem": quem, "usuario": usuario, "pc": pc}
+                u = getattr(self, "_usuario", None)
+                if u:
+                    eu.update(login=u["login"], admin=u.get("perfil") == "admin", principal=bool(u.get("principal")))
+                return self._enviar(200, {"quadro": at.quadro(comum.carregar_config()), "recentes": at.recentes(30), "eu": eu})
             if url.path == "/periodo":
                 ini, fim = comum.periodo()
                 if q.get("formato") == "json":
@@ -2056,10 +2145,23 @@ class Handler(BaseHTTPRequestHandler):
             senha = form.get("senha", [""])[0]
             r = _rede()
             import hmac
-            usuario_ok = (not comum.NUVEM) or hmac.compare_digest(form.get("usuario", [""])[0].strip().lower(),
-                                                                  (os.environ.get("ADMIN_USUARIO") or "admin").strip().lower())
-            if comum.NUVEM and _limitar_login(self.client_ip()):
-                return self._login("Muitas tentativas erradas. Espere 15 minutos.")
+            if comum.NUVEM:
+                import usuarios
+                if _limitar_login(self.client_ip()):
+                    return self._login("Muitas tentativas erradas. Espere 15 minutos.")
+                u = usuarios.entrar(form.get("usuario", [""])[0], senha)
+                _limitar_login(self.client_ip(), falhou=u is None)
+                if not u:
+                    return self._login("Usuário ou senha incorretos.")
+                comum.log("Login no sistema online: %s" % u["login"])
+                self.send_response(303)
+                self.send_header("Set-Cookie", "rv_sessao=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d; Secure"
+                                 % (usuarios.sessao_nova(u), usuarios.DURACAO))
+                self.send_header("Location", "/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            usuario_ok = True
             certo = usuario_ok and r and r.papel() == "servidor" and r.token() and hmac.compare_digest(r.token(senha), r.token())
             if comum.NUVEM:
                 _limitar_login(self.client_ip(), falhou=not certo)
@@ -2080,6 +2182,8 @@ class Handler(BaseHTTPRequestHandler):
         if remoto and caminho in NO_CHROME_DAQUI:
             return self._enviar(200, {"ok": False, "erro": "Essa conta baixa no computador principal: faça isso lá (o Chrome dela está naquele computador)."})
         quem, usuario, pc = self._identidade()
+        if caminho.startswith("/api/usuarios/"):
+            return self._enviar(200, self._usuarios(caminho))
         if caminho == "/api/agente/ping":
             acao = lambda d: agente_ping(d, self.client_address[0])
         elif caminho == "/api/presenca":

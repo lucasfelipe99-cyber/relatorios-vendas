@@ -139,6 +139,7 @@ tr.baixo td{background:var(--warbg)}
 .pn-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .pn-top h2{font-size:18px;margin:0}.pn-top .sub{color:var(--mut);font-size:12.5px;margin-top:3px}
 .pn-sel{display:flex;gap:8px;align-items:center}
+#us-minha input{padding:8px 10px;border:1px solid var(--li);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
 body.nuvem [onclick^="baixar("],body.nuvem [onclick^="pararExec"]{display:none!important}
 .pn-filtro{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:10px 14px;margin-bottom:14px}
 .pn-filtro .grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -286,6 +287,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
     <button data-s="atalhos" title="Links e atalhos"><svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg><span class="txt">Links e atalhos</span></button>
     <button data-s="traducao" title="Tradução de SKU"><svg viewBox="0 0 24 24"><path d="M4 7h9M8.5 4v3M6 7c.5 3 2.5 5.5 5.5 6.5M11 7c-.6 3.4-3 6-6.5 7.5"/><path d="M13 20l4-9 4 9M14.5 17h5"/></svg><span class="txt">Tradução de SKU</span></button>
     <button data-s="custos" title="Custos e imposto"><svg viewBox="0 0 24 24"><path d="M4 7h16v12H4z"/><path d="M4 7l2-3h12l2 3"/><path d="M12 10.5v5M10 12c0-.8.9-1.5 2-1.5s2 .6 2 1.4c0 1.8-4 1-4 2.8 0 .8.9 1.3 2 1.3s2-.6 2-1.4"/></svg><span class="txt">Custos e imposto</span></button>
+    <button data-s="usuarios" title="Usuários" style="display:none"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.7-3.6 3.5-5.5 7-5.5s6.3 1.9 7 5.5"/><path d="M18.5 4.5l1 1 2-2"/></svg><span class="txt">Usuários</span></button>
     <button data-s="ajustes" title="Horários e ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="txt">Horários e ajustes</span></button>
     <div class="sep"></div>
     <button data-s="ajuda" title="Ajuda"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.4"/><path d="M12 17h.01"/></svg><span class="txt">Ajuda</span></button>
@@ -510,6 +512,25 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
   <div class="card"><h2>Onde fica cada coisa</h2><div id="onde"></div></div>
 </section>
 
+<section id="s-usuarios" class="sec">
+  <div class="card" id="us-admin">
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+      <div><h2 style="margin:0">Usuários</h2><div class="small mut" style="margin-top:4px">Cada pessoa entra no link com o próprio usuário e senha. <b>Admin</b> também cadastra usuários; <b>Usuário</b> usa todo o resto do sistema. O que cada um faz aparece com o nome dele no sistema.</div></div>
+      <button class="b pri" onclick="usEditar()">+ Novo usuário</button>
+    </div>
+    <div class="tw" style="margin-top:12px"><table class="fin" id="us-tab"></table></div>
+  </div>
+  <div class="card" style="margin-top:14px;max-width:520px">
+    <h2 style="margin:0 0 4px">Minha senha</h2><div class="small mut" id="us-eu" style="margin-bottom:10px"></div>
+    <div id="us-minha" style="display:grid;gap:8px;max-width:320px">
+      <input type="password" id="us-atual" placeholder="Senha atual" autocomplete="current-password">
+      <input type="password" id="us-nova" placeholder="Senha nova (mínimo 8 caracteres)" autocomplete="new-password">
+      <input type="password" id="us-nova2" placeholder="Repita a senha nova" autocomplete="new-password">
+      <button class="b pri" onclick="usMinha()">Trocar minha senha</button>
+    </div>
+  </div>
+</section>
+
 <section id="s-traducao" class="sec">
   <div class="card">
     <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
@@ -599,6 +620,7 @@ document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>{
   if(b.dataset.s==="meses")rMeses();
   if(b.dataset.s==="status")rPainel();
   if(b.dataset.s==="traducao")rTrad();
+  if(b.dataset.s==="usuarios")rUsuarios();
   document.querySelectorAll(".sec").forEach(s=>s.classList.toggle("on",s.id==="s-"+b.dataset.s));
   try{localStorage.setItem("aba",b.dataset.s)}catch(e){}
 });
@@ -624,12 +646,15 @@ async function carregar(){
   E=await (await fetch("/api/estado"+(MES_SEL?"?mes="+encodeURIComponent(MES_SEL):""))).json();
   rSelMes();
   if(E.nuvem&&!document.getElementById("bt-sair")){$("#bt-atualizar").style.display="none";document.body.classList.add("nuvem");
-    ["perfis","atalhos"].forEach(k=>{const x=document.querySelector(`#nav button[data-s="${k}"]`);if(x)x.style.display="none"});
+    ["perfis","atalhos","ajustes"].forEach(k=>{const x=document.querySelector(`#nav button[data-s="${k}"]`);if(x)x.style.display="none"});
+    const nu=document.querySelector('#nav button[data-s="usuarios"]');if(nu)nu.style.display="";
+    $("#topo").insertAdjacentHTML("beforeend",`<span class="small mut" style="margin-left:auto" title="Você está conectado como ${esc((E.eu||{}).login||"")}">${esc((E.eu||{}).usuario||"")}</span>`);
     $("#topo").insertAdjacentHTML("beforeend",'<a class="b" id="bt-sair" href="/sair" title="Sair do sistema online">Sair</a>')}
   $("#atualizado").textContent="Atualizado "+new Date().toLocaleTimeString("pt-BR");
   faixaRede();
   if(E.erro_rede){rRede();return}
   renderTudo();
+  if($("#s-usuarios").classList.contains("on"))rUsuarios();
 }
 function rSelMes(){const sel=$("#sel-mes"),M=E.meses_consolidado||[];if(!sel||!M.length)return;
   const k=M.map(m=>m.chave).join(",");if(sel.dataset.k!==k){sel.innerHTML=M.map((m,i)=>`<option value="${m.chave}">${m.rotulo}${i===0?" (atual)":""}</option>`).join("");sel.dataset.k=k}
@@ -1243,6 +1268,41 @@ window.pnConferir=i=>{const r=PN_R,g=(r.por_canal||[])[i];if(!g)return;const c=g
     if(!res.ok)return toast(res.erro||"erro");dlg.close();toast(remover?"Conferência retirada":"Marcado como conferido");rPainel(true)};
   dlg.querySelector("#cf-ok").onclick=()=>env(false);const t=dlg.querySelector("#cf-tirar");if(t)t.onclick=()=>env(true);
   dlg.showModal()};
+// ---------------------------------------------------------------- usuários (online)
+let US=[];
+async function rUsuarios(){if(!E)return;const eu=E.eu||{};
+  $("#us-eu").textContent=eu.principal?"Você é o admin principal: a senha dele é trocada no Render (Environment → ADMIN_SENHA).":`Conectado como ${eu.usuario||""} (${eu.login||""}).`;
+  $("#us-minha").style.display=eu.principal?"none":"grid";
+  $("#us-admin").style.display=eu.admin?"":"none";if(!eu.admin)return;
+  const r=await post("/api/usuarios/listar",{});if(!r.ok){$("#us-tab").innerHTML=`<tr><td class="erro">${esc(r.erro||"erro")}</td></tr>`;return}
+  US=r.usuarios;const dh=d=>d?dataHora(d):"—";
+  $("#us-tab").innerHTML=`<thead><tr><th>Nome</th><th>Usuário</th><th>Perfil</th><th>Situação</th><th>Último acesso</th><th></th></tr></thead><tbody>${US.map((u,i)=>`<tr>
+    <td>${esc(u.nome||"")}${u.principal?' <span class="small mut">(principal)</span>':""}</td><td style="font-family:monospace">${esc(u.login)}</td>
+    <td>${u.perfil==="admin"?'<span class="pill p-ok">admin</span>':'<span class="pill">usuário</span>'}</td>
+    <td>${u.ativo?'<span class="pill p-ok">ativo</span>':'<span class="pill p-err">bloqueado</span>'}</td><td class="small">${u.principal?"—":esc(dh(u.ultimo_acesso))}</td>
+    <td style="white-space:nowrap">${u.principal?'<span class="small mut">senha no Render</span>':`<button class="bs" onclick="usEditar(${i})">Editar</button> <button class="bs" style="color:var(--err)" onclick="usRemover(${i})">Remover</button>`}</td></tr>`).join("")}</tbody>`}
+window.rUsuarios=rUsuarios;
+window.usEditar=i=>{const u=i==null?null:US[i];let dlg=document.getElementById("dlg-us");
+  if(!dlg){dlg=document.createElement("dialog");dlg.id="dlg-us";dlg.style.cssText="border:1px solid var(--li);border-radius:12px;padding:0;max-width:440px;width:calc(100% - 32px);background:var(--card);color:var(--tx)";document.body.appendChild(dlg)}
+  const inp="width:100%;padding:8px;border:1px solid var(--li);border-radius:8px;background:var(--bg);color:var(--tx)";
+  dlg.innerHTML=`<form method="dialog" style="padding:18px;display:grid;gap:10px"><h2 style="margin:0;font-size:16px">${u?"Editar "+esc(u.nome):"Novo usuário"}</h2>
+    <label class="small">Nome<br><input id="du-nome" value="${esc(u?u.nome:"")}" style="${inp}" placeholder="Ex.: Jhonny"></label>
+    <label class="small">Usuário (login)<br><input id="du-login" value="${esc(u?u.login:"")}" ${u?"readonly":""} style="${inp}" placeholder="ex.: jhonny" autocapitalize="none"></label>
+    <label class="small">${u?"Senha nova (deixe vazio para manter)":"Senha (mínimo 8 caracteres)"}<br><input id="du-senha" type="password" autocomplete="new-password" style="${inp}"></label>
+    <label class="small">Perfil<br><select id="du-perfil" style="${inp}"><option value="usuario">Usuário — usa o sistema</option><option value="admin"${u&&u.perfil==="admin"?" selected":""}>Admin — também cadastra usuários</option></select></label>
+    <label class="chk small"><input type="checkbox" id="du-ativo" ${!u||u.ativo?"checked":""}> pode entrar (desmarque para bloquear)</label>
+    <div id="du-msg"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="b" value="x">Cancelar</button><button class="b pri" id="du-ok" type="button">Salvar</button></div></form>`;
+  dlg.querySelector("#du-ok").onclick=async()=>{const r=await post("/api/usuarios/salvar",{nome:$("#du-nome").value,login:$("#du-login").value,senha:$("#du-senha").value,
+      perfil:$("#du-perfil").value,ativo:$("#du-ativo").checked,so_alterar:!!u});
+    if(!r.ok){$("#du-msg").innerHTML=`<div class="erro">${esc(r.erro||"erro")}</div>`;return}dlg.close();toast("Usuário salvo");rUsuarios()};
+  dlg.showModal()};
+window.usRemover=async i=>{const u=US[i];if(!confirm(`Remover o usuário ${u.nome} (${u.login})? Ele não vai mais conseguir entrar.`))return;
+  const r=await post("/api/usuarios/remover",{login:u.login});toast(r.ok?"Usuário removido":(r.erro||"erro"));rUsuarios()};
+window.usMinha=async()=>{const a=$("#us-atual").value,n=$("#us-nova").value;if(n!==$("#us-nova2").value)return toast("As duas senhas novas não são iguais");
+  const r=await post("/api/usuarios/minha-senha",{atual:a,nova:n});if(!r.ok)return toast(r.erro||"erro");
+  toast("Senha trocada. Entre de novo com a senha nova.");setTimeout(()=>location.href="/sair",1500)};
+
 // ---------------------------------------------------------------- tradução de anúncio / SKU
 let TR=null,TR_ED={};
 async function rTrad(forcar){const cid=cliSel(),mes=mesTela(),tab=$("#tr-tab");
