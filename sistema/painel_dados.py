@@ -29,33 +29,202 @@ _CACHE = {}
 _TRAVA = threading.Lock()
 
 
+_LEITURA = threading.Lock()        # um consolidado lido por vez: ler o .xlsx é o que mais usa memória
+_MAX_CACHE = 60
+_GRANDE = 2 * 1024 * 1024           # acima disso o .xlsx é lido em fluxo
+_PASTA_CACHE = os.path.join(comum.PASTA_SISTEMA, "dados", "cache_painel")
+_VERSAO_CACHE = 1
+
+
+def _devolver_memoria():
+    """Depois de ler um .xlsx grande, devolve ao sistema a memória que o pandas já soltou (Linux/Render)."""
+    import gc
+    gc.collect()
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
+def _vazio(v):
+    return None if v is None or (isinstance(v, str) and not v.strip()) or (isinstance(v, float) and v != v) else v
+
+
+def _sku(v):
+    v = _vazio(v)
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
+def _num(v):
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v) if v == v else 0.0
+    try:
+        return float(str(v).strip())
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _ler_somado(caminho):
+    """Lê a aba DB linha a linha (sem montar a planilha inteira no pandas) já somando por
+    tipo/marketplace/conta/data/SKU/medida. Devolve (DataFrame pequeno, {SKU: descrição})."""
+    import pandas as pd
+    chave = {cs: k for k, _, cs in MEDIDAS}
+    chave.update({cs: k for k, cs in OUTRAS})
+    try:
+        from python_calamine import CalamineWorkbook
+    except ImportError:
+        CalamineWorkbook = None
+    grande = os.path.getsize(caminho) > _GRANDE
+    if grande:                              # arquivo grande: lê em fluxo (pouca memória, mais lento; o resultado fica em disco)
+        import openpyxl
+        wb = openpyxl.load_workbook(caminho, read_only=True, data_only=True)
+        it = wb["DB"].iter_rows(values_only=True)
+        cab = [str(c).strip() if c is not None else "" for c in next(it, [])]
+        linhas = it
+    elif CalamineWorkbook is None:          # sem o leitor rápido: caminho antigo (pandas)
+        df = C.ler_excel(caminho, sheet_name="DB", dtype={"SKU": str},
+                         usecols=["Marketplace", "Marketplace venda", "SKU", "Data", "Categoria", "Sub Categoria",
+                                  "Valor completo", "Descrição", "Datatype"])
+        linhas = df.itertuples(index=False, name=None)
+        cab = list(df.columns)
+    else:
+        wb = CalamineWorkbook.from_path(caminho)
+        it = wb.get_sheet_by_name("DB").iter_rows()
+        cab = [str(c).strip() for c in next(it, [])]
+        linhas = it
+    i = {n: cab.index(n) for n in ("Marketplace", "Marketplace venda", "SKU", "Data", "Categoria", "Sub Categoria",
+                                   "Valor completo", "Descrição", "Datatype")}
+    somas, desc = {}, {}
+    for r in linhas:
+        tipo = r[i["Datatype"]]
+        if tipo not in ("Actual", "Forecast"):
+            continue
+        k = chave.get((_vazio(r[i["Categoria"]]), _vazio(r[i["Sub Categoria"]])))
+        if k is None:
+            continue
+        sku = _sku(r[i["SKU"]])
+        ch = (tipo, _vazio(r[i["Marketplace"]]), _vazio(r[i["Marketplace venda"]]), _vazio(r[i["Data"]]), sku, k)
+        somas[ch] = somas.get(ch, 0.0) + _num(r[i["Valor completo"]])
+        if tipo == "Actual" and sku not in desc:
+            d = _vazio(r[i["Descrição"]])
+            if d is not None:
+                desc[sku] = str(d)[:80]
+    linhas = None
+    if grande:
+        wb.close()
+    df = pd.DataFrame([ch + (v,) for ch, v in somas.items()],
+                      columns=["Datatype", "Marketplace", "Marketplace venda", "Data", "SKU", "k", "Valor completo"])
+    if df.empty:
+        df["Valor completo"] = df["Valor completo"].astype(float)
+    return df, desc
+
+
+def _arq_cache(caminho):
+    import hashlib
+    return os.path.join(_PASTA_CACHE, hashlib.sha1(os.path.abspath(caminho).encode("utf-8")).hexdigest() + ".pkl")
+
+
+def _do_disco(caminho, mt):
+    """Resumo já calculado deste consolidado (gravado pelo próprio sistema), se o arquivo não mudou."""
+    import pickle
+    try:
+        with open(_arq_cache(caminho), "rb") as f:
+            d = pickle.load(f)
+        if d.get("versao") == _VERSAO_CACHE and d.get("mt") == mt and d.get("caminho") == os.path.abspath(caminho):
+            d["real"].attrs["desc"] = d.get("desc") or {}
+            return d["real"], d["fc"]
+    except Exception:
+        pass
+    return None
+
+
+def _para_disco(caminho, mt, real, fc):
+    import pickle
+    try:
+        os.makedirs(_PASTA_CACHE, exist_ok=True)
+        arq = _arq_cache(caminho)
+        with open(arq + ".tmp", "wb") as f:
+            pickle.dump({"versao": _VERSAO_CACHE, "mt": mt, "caminho": os.path.abspath(caminho),
+                         "real": real, "fc": fc, "desc": real.attrs.get("desc") or {}}, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(arq + ".tmp", arq)
+    except Exception as e:
+        comum.log("painel: não gravei o resumo em disco: %s" % e)
+
+
+def aquecer(cfg=None):
+    """Prepara (em segundo plano) o resumo dos consolidados do mês atual e do anterior de todos os clientes."""
+    try:
+        cfg = cfg or comum.carregar_config()
+        hoje = dt.date.today()
+        meses = ["%04d-%02d" % (hoje.year, hoje.month),
+                 "%04d-%02d" % ((hoje.year - 1, 12) if hoje.month == 1 else (hoje.year, hoje.month - 1))]
+        for c in cfg.get("clientes", []):
+            if c.get("ativo") is False:
+                continue
+            for m in meses:
+                est = _estado_mes(c["id"], m) or {}
+                for e in (est, est.get("ultimo_ok") or {}):
+                    arq = e.get("arquivo")
+                    if e.get("ok") and arq and os.path.isfile(arq):
+                        try:
+                            _ler(arq)
+                        except Exception as ex:
+                            comum.log("painel: não preparei %s: %s" % (os.path.basename(arq), ex))
+    except Exception as e:
+        comum.log("painel: preparo em segundo plano falhou: %s" % e)
+
+
 def _ler(caminho):
-    """DataFrame só com o realizado (Actual) e o forecast separado; guardado em memória enquanto o arquivo não muda."""
+    """Realizado (Actual) e forecast do consolidado, já somados por dia/marketplace/conta/SKU/medida.
+
+    Guarda em memória só essa tabela resumida (bem menor que a planilha) enquanto o arquivo não muda;
+    as descrições dos SKUs ficam em real.attrs["desc"]."""
     mt = os.path.getmtime(caminho)
     with _TRAVA:
         c = _CACHE.get(caminho)
         if c and c[0] == mt:
             return c[1], c[2]
-    import pandas as pd
-    df = C.ler_excel(caminho, sheet_name="DB",
-                     usecols=["Marketplace", "Marketplace venda", "SKU", "Data", "Categoria", "Sub Categoria",
-                              "Valor completo", "Type", "Descrição", "Datatype"],
-                     dtype={"SKU": str})
-    df["Valor completo"] = pd.to_numeric(df["Valor completo"], errors="coerce").fillna(0.0)
-    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-    chave = {cs: k for k, _, cs in MEDIDAS}
-    chave.update({cs: k for k, cs in OUTRAS})
-    df["k"] = [chave.get((a, b)) for a, b in zip(df["Categoria"], df["Sub Categoria"])]
-    df = df[df["k"].notna()]
-    real = df[df["Datatype"] == "Actual"].copy()
-    fc = df[df["Datatype"] == "Forecast"].copy()
-    with _TRAVA:
-        _CACHE[caminho] = (mt, real, fc)
-    return real, fc
+    with _LEITURA:
+        with _TRAVA:                       # outra requisição pode ter lido enquanto esta esperava
+            c = _CACHE.get(caminho)
+            if c and c[0] == mt:
+                return c[1], c[2]
+        import pandas as pd
+        disco = _do_disco(caminho, mt)
+        if disco is not None:
+            with _TRAVA:
+                _CACHE[caminho] = (mt,) + disco
+            return disco
+        df, desc = _ler_somado(caminho)
+        chaves = ["Datatype", "Marketplace", "Marketplace venda", "Data", "SKU", "k"]
+        df["Data"] = pd.to_datetime(df["Data"], errors="coerce").dt.normalize()
+        soma = df.groupby(chaves, dropna=False, sort=False)["Valor completo"].sum().reset_index()
+        del df
+        for col in ("Datatype", "Marketplace", "Marketplace venda", "SKU", "k"):
+            soma[col] = soma[col].astype("category")
+        real = soma[soma["Datatype"] == "Actual"].drop(columns=["Datatype"]).reset_index(drop=True)
+        fc = soma[soma["Datatype"] == "Forecast"].drop(columns=["Datatype"]).reset_index(drop=True)
+        for t in (real, fc):
+            for col in ("Marketplace", "Marketplace venda", "SKU", "k"):
+                t[col] = t[col].cat.remove_unused_categories()
+        real.attrs["desc"] = desc
+        del soma
+        _devolver_memoria()
+        _para_disco(caminho, mt, real, fc)
+        with _TRAVA:
+            _CACHE[caminho] = (mt, real, fc)
+            while len(_CACHE) > _MAX_CACHE:
+                _CACHE.pop(next(iter(_CACHE)))
+        return real, fc
 
 
 def _soma(df):
-    s = df.groupby("k")["Valor completo"].sum().to_dict()
+    s = df.groupby("k", observed=True)["Valor completo"].sum().to_dict()
     r = {k: round(float(s.get(k, 0.0)), 2) for k, _, _ in MEDIDAS}
     r.update({k: round(float(s.get(k, 0.0)), 2) for k, _ in OUTRAS})
     return _derivados(r)
@@ -169,6 +338,7 @@ def resumo(cfg, cliente, ano, mes, hoje=None, filtro=None):
         saida["sem_dados"] = True
         return saida
     real, fc = _ler(arq)
+    desc_skus = real.attrs.get("desc") or {}
     if real.empty:
         saida["sem_dados"] = True
         return saida
@@ -192,7 +362,7 @@ def resumo(cfg, cliente, ano, mes, hoje=None, filtro=None):
 
     # por marketplace e por conta (Marketplace venda)
     grupos = []
-    for (mk, conta), g in real.groupby(["Marketplace", "Marketplace venda"]):
+    for (mk, conta), g in real.groupby(["Marketplace", "Marketplace venda"], observed=True):
         grupos.append(dict(_soma(g), marketplace=mk, conta=conta))
     grupos.sort(key=lambda x: -x["fat_bruto"])
     _marcar_conferencias(cliente["id"], chave, grupos, f)
@@ -203,7 +373,7 @@ def resumo(cfg, cliente, ano, mes, hoje=None, filtro=None):
     dias = []
     for d, g in real.groupby(real["Data"].dt.date):
         s = _soma(g)
-        mks = g[g["k"] == "fat_bruto"].groupby("Marketplace")["Valor completo"].sum().round(2).to_dict()
+        mks = g[g["k"] == "fat_bruto"].groupby("Marketplace", observed=True)["Valor completo"].sum().round(2).to_dict()
         dias.append({"dia": d.isoformat(), "fat_bruto": s["fat_bruto"], "fat_liquido": s["fat_liquido"],
                      "publicidade": s["publicidade"], "margem": s["margem"], "margem_pct": s["margem_pct"],
                      "unidades": s["unidades"], "por_mk": mks})
@@ -211,8 +381,11 @@ def resumo(cfg, cliente, ano, mes, hoje=None, filtro=None):
 
     # produtos: os que mais faturam e os de pior margem (só SKUs com venda)
     vend = real[(real["SKU"].astype(str) != "0") & (real["SKU"].astype(str) != "")]
-    desc = vend.dropna(subset=["Descrição"]).groupby("SKU")["Descrição"].first().to_dict()
-    porsku = vend.pivot_table(index="SKU", columns="k", values="Valor completo", aggfunc="sum", fill_value=0.0)
+    desc = desc_skus
+    porsku = vend.pivot_table(index="SKU", columns="k", values="Valor completo", aggfunc="sum", fill_value=0.0,
+                              observed=True)
+    porsku.columns = [str(x) for x in porsku.columns]
+    porsku.index = porsku.index.astype(str)
     for k, _, _ in MEDIDAS:
         if k not in porsku.columns:
             porsku[k] = 0.0

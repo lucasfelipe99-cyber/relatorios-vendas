@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -2470,10 +2471,18 @@ def admin_importar(dados):
     os.remove(arq)
     comum.log("Importação do computador: %d arquivo(s); %d .json ajustados; %d conta(s) passaram para '%s'."
               % (n, trocados, sem, estacao))
+    threading.Thread(target=_aquecer_painel, args=(5,), daemon=True).start()
     return {"ok": True, "fim": True, "arquivos": n, "json_ajustados": trocados, "contas_para_estacao": sem, "estacao": estacao}
 
 
 ACOES["/api/admin/importar"] = admin_importar
+
+
+def _aquecer_painel(espera=0):
+    """Prepara em segundo plano os números do painel (lê cada consolidado uma vez e guarda o resumo em disco)."""
+    time.sleep(espera)
+    import painel_dados
+    painel_dados.aquecer()
 
 
 def criar_servidor(cfg=None):
@@ -2488,6 +2497,8 @@ def criar_servidor(cfg=None):
         import estacao
         return estacao.criar_servidor(cfg)
     threading.Thread(target=_retratar_regra_nao_vendas, daemon=True).start()
+    if comum.NUVEM:
+        threading.Thread(target=_aquecer_painel, args=(30,), daemon=True).start()
     host = "0.0.0.0" if papel == "servidor" else "127.0.0.1"   # servidor: aceita a rede (com senha)
     porta = int(os.environ.get("PORT") or 0) if comum.NUVEM else 0
     return ThreadingHTTPServer((host, porta or int(cfg.get("porta_painel", 8765))), Handler)
