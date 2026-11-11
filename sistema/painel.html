@@ -139,6 +139,7 @@ tr.baixo td{background:var(--warbg)}
 .pn-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .pn-top h2{font-size:18px;margin:0}.pn-top .sub{color:var(--mut);font-size:12.5px;margin-top:3px}
 .pn-sel{display:flex;gap:8px;align-items:center}
+body.nuvem [onclick^="baixar("],body.nuvem [onclick^="pararExec"]{display:none!important}
 .pn-filtro{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:10px 14px;margin-bottom:14px}
 .pn-filtro .grp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .pn-filtro .lb{font-size:12px;color:var(--mut);font-weight:600;margin-right:2px}
@@ -622,7 +623,8 @@ const mesTela=()=>MES_SEL||mesAtualChave();
 async function carregar(){
   E=await (await fetch("/api/estado"+(MES_SEL?"?mes="+encodeURIComponent(MES_SEL):""))).json();
   rSelMes();
-  if(E.nuvem&&!document.getElementById("bt-sair")){$("#bt-atualizar").style.display="none";
+  if(E.nuvem&&!document.getElementById("bt-sair")){$("#bt-atualizar").style.display="none";document.body.classList.add("nuvem");
+    ["perfis","atalhos"].forEach(k=>{const x=document.querySelector(`#nav button[data-s="${k}"]`);if(x)x.style.display="none"});
     $("#topo").insertAdjacentHTML("beforeend",'<a class="b" id="bt-sair" href="/sair" title="Sair do sistema online">Sair</a>')}
   $("#atualizado").textContent="Atualizado "+new Date().toLocaleTimeString("pt-BR");
   faixaRede();
@@ -742,7 +744,7 @@ function rStatus(){
   const X=E.execucao||{},hor=E.config.horarios||{};
   const et=(n,nome,quando,txt,parada,aba)=>`<div class="etapa${parada?" parada":""}"><span class="n">${n}. ${parada?"parada":"ativa"}</span><b><a href="#" onclick="irPara('${aba}');return false" style="color:inherit">${nome}</a></b><div class="small">${quando}</div><div class="small mut">${txt}</div></div>`;
   $("#etapas").innerHTML=
-    et(1,"Vendas",E.config.execucao?.agendado?`sozinho todo dia às ${esc(hor.inicio_atalhos||"—")}`:"manual: clique em Baixar todos agora",X.rodando?`<b>rodando agora:</b> ${esc(X.cliente||"")}`:`${R.recebidos}/${R.esperados} baixados hoje`,false,"vendas")+
+    et(1,"Vendas",E.nuvem?"suba os relatórios em Vendas (Subir relatório)":E.config.execucao?.agendado?`sozinho todo dia às ${esc(hor.inicio_atalhos||"—")}`:"manual: clique em Baixar todos agora",X.rodando?`<b>rodando agora:</b> ${esc(X.cliente||"")}`:`${R.recebidos}/${R.esperados} baixados hoje`,false,"vendas")+
     et(2,"ADS","manual: subir por cliente",resumoLanc("ads"),false,"ads")+
     et(3,"Afiliados","manual: subir por cliente",resumoLanc("afiliados"),false,"afiliados")+
     et("3b","Visita & Conversão","manual: subir por cliente",resumoLanc("visitas"),false,"visitas")+
