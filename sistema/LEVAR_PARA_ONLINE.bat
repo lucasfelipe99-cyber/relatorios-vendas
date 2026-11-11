@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
 echo.
 echo  == Levar os dados deste computador para o sistema online ==

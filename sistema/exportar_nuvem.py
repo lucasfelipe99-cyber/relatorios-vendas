@@ -17,6 +17,8 @@ import json
 import os
 import socket
 import sys
+import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -68,8 +70,21 @@ def enviar(arq, url, usuario, senha, estacao):
             req = urllib.request.Request(url.rstrip("/") + "/api/admin/importar", data=corpo, method="POST",
                                          headers={"X-Painel": "1", "Content-Type": "application/json",
                                                   "Authorization": "Bearer " + token, "X-Usuario": usuario})
-            with urllib.request.urlopen(req, timeout=900) as r:
-                resp = json.loads(r.read() or b"{}")
+            for tentativa in range(8):          # o online pode estar reiniciando (atualização): tenta de novo
+                try:
+                    with urllib.request.urlopen(req, timeout=1800) as r:
+                        resp = json.loads(r.read() or b"{}")
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code == 401:
+                        raise SystemExit("Senha recusada pelo sistema online.")
+                    if e.code not in (502, 503, 504) or tentativa == 7:
+                        raise
+                except (urllib.error.URLError, OSError):
+                    if tentativa == 7:
+                        raise
+                print("  o online não respondeu (parte %d); tento de novo em 30 s..." % (i + 1))
+                time.sleep(30)
             if not resp.get("ok"):
                 raise SystemExit("Erro na parte %d: %s" % (i + 1, resp.get("erro")))
             print("parte %d/%d enviada" % (i + 1, total))

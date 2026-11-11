@@ -2276,10 +2276,23 @@ def admin_importar(dados):
     pasta = os.path.join(comum.PASTA_SISTEMA, "_importar")
     os.makedirs(pasta, exist_ok=True)
     arq = os.path.join(pasta, ident + ".zip")
-    with open(arq, "ab" if parte else "wb") as f:
+    # cada parte num arquivo próprio: reenviar uma parte (depois de uma queda) não estraga o pacote
+    p_arq = os.path.join(pasta, "%s.%05d.parte" % (ident, parte))
+    with open(p_arq + ".tmp", "wb") as f:
         f.write(base64.b64decode(dados.get("conteudo") or ""))
+    os.replace(p_arq + ".tmp", p_arq)
     if parte < total - 1:
-        return {"ok": True, "parte": parte, "recebido": os.path.getsize(arq)}
+        return {"ok": True, "parte": parte}
+    faltam = [i for i in range(total) if not os.path.isfile(os.path.join(pasta, "%s.%05d.parte" % (ident, i)))]
+    if faltam:
+        return {"ok": False, "erro": "Faltam partes: %s. Rode de novo." % faltam[:10]}
+    with open(arq, "wb") as d:
+        for i in range(total):
+            pi = os.path.join(pasta, "%s.%05d.parte" % (ident, i))
+            with open(pi, "rb") as o:
+                shutil.copyfileobj(o, d)
+    for i in range(total):
+        os.remove(os.path.join(pasta, "%s.%05d.parte" % (ident, i)))
     with zipfile.ZipFile(arq) as z:
         man = json.loads(z.read("manifesto.json").decode("utf-8"))
         cfg = comum.carregar_config()
