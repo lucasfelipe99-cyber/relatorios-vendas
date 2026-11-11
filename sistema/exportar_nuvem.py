@@ -24,7 +24,7 @@ import zipfile
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 PULAR_RAIZ = {"_sistema", "_exportados", "_to_delete", "_enviados"}
-PULAR_DIR = {"_anteriores", "__pycache__", "backups", "logs", ".venv", "app", "_importar"}
+PULAR_DIR = {"_anteriores", "__pycache__", "backups", "logs", ".venv", "app", "_importar", "janela", "claude_trabalho"}
 PARTE = 8 * 1024 * 1024
 
 
