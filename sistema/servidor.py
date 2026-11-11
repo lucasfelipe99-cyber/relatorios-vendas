@@ -1871,6 +1871,14 @@ class Handler(BaseHTTPRequestHandler):
         """local: só com Host localhost (proteção contra sites maliciosos). Rede: precisa da senha."""
         if self._local() and self._host_ok():
             return True
+        if comum.NUVEM:
+            ip = self.client_ip()
+            if _limitar_login(ip):
+                return False
+            ok = self._token_ok()
+            if not ok and ("Bearer " in (self.headers.get("Authorization") or "") or "rv_token=" in (self.headers.get("Cookie") or "")):
+                _limitar_login(ip, falhou=True)      # chave errada também conta como tentativa
+            return ok
         return not self._local() and self._token_ok()
 
     def _remoto(self):
@@ -2050,9 +2058,12 @@ class Handler(BaseHTTPRequestHandler):
             import hmac
             usuario_ok = (not comum.NUVEM) or hmac.compare_digest(form.get("usuario", [""])[0].strip().lower(),
                                                                   (os.environ.get("ADMIN_USUARIO") or "admin").strip().lower())
+            if comum.NUVEM and _limitar_login(self.client_ip()):
+                return self._login("Muitas tentativas erradas. Espere 15 minutos.")
+            certo = usuario_ok and r and r.papel() == "servidor" and r.token() and hmac.compare_digest(r.token(senha), r.token())
             if comum.NUVEM:
-                _limitar_login(self.client_ip())
-            if usuario_ok and r and r.papel() == "servidor" and r.token() and hmac.compare_digest(r.token(senha), r.token()):
+                _limitar_login(self.client_ip(), falhou=not certo)
+            if certo:
                 self.send_response(303)
                 self.send_header("Set-Cookie", "rv_token=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000%s"
                                  % (r.token(), "; Secure" if comum.NUVEM else ""))
@@ -2232,15 +2243,19 @@ def _migrar(cfg):
 _TENTATIVAS = {}
 
 
-def _limitar_login(ip):
-    """Online: no máximo 10 tentativas de login por minuto por endereço (freia quem tenta adivinhar a senha)."""
+def _limitar_login(ip, falhou=None):
+    """Online: 8 senhas erradas em 15 minutos bloqueiam aquele endereço por 15 minutos (e há um total geral de 60/15 min,
+    para quem tenta de vários endereços). falhou=None só consulta; True/False registra o resultado. Devolve True se bloqueado."""
     import time as _t
     agora = _t.time()
-    lista = [x for x in _TENTATIVAS.get(ip, []) if agora - x < 60]
-    lista.append(agora)
-    _TENTATIVAS[ip] = lista
-    if len(lista) > 10:
-        _t.sleep(5)
+    for k in list(_TENTATIVAS):
+        _TENTATIVAS[k] = [x for x in _TENTATIVAS[k] if agora - x < 900]
+    if falhou:
+        _TENTATIVAS.setdefault(ip, []).append(agora)
+        _TENTATIVAS.setdefault("*", []).append(agora)
+    elif falhou is False:
+        _TENTATIVAS.pop(ip, None)
+    return len(_TENTATIVAS.get(ip, [])) >= 8 or len(_TENTATIVAS.get("*", [])) >= 60
 
 
 # ---------------------------------------------------------------- online: importar os dados do computador
