@@ -426,6 +426,31 @@ def completar_custos(cliente, mk, tratado, hoje=None):
         return []
     cid = cliente.get("cliente_id") or cliente["id"]
     ano, mes = mes_do_periodo(hoje)
+    return _acrescentar_na_tabela(cid, cliente.get("cliente_nome") or cliente["nome"], ano, mes, vendidos,
+                                  cfg_mk_nome(mk), "SKUs vendidos sem custo")
+
+
+def cfg_mk_nome(mk):
+    try:
+        return comum.carregar_config().get("marketplaces", {}).get(mk, {}).get("nome", mk)
+    except Exception:
+        return mk
+
+
+def acrescentar_skus(cliente_id, ano, mes, skus, origem="preenchido no app"):
+    """SKUs ({sku: descrição}) que ainda não estão na tabela de custos do mês entram nela com custo vazio.
+    Devolve os SKUs acrescentados."""
+    skus = {_texto_sku(k): str(v or "").strip()[:200] for k, v in (skus or {}).items() if _texto_sku(k) and _texto_sku(k) != "0"}
+    if not skus:
+        return []
+    cfg = comum.carregar_config()
+    grupo = next((c for c in cfg["clientes"] if c["id"] == cliente_id), None)
+    if not grupo:
+        return []
+    return _acrescentar_na_tabela(cliente_id, grupo["nome"], ano, mes, skus, origem, "SKUs " + origem)
+
+
+def _acrescentar_na_tabela(cid, nome_cli, ano, mes, vendidos, nome_mk, rotulo):
     with comum.TRAVA_CFG:
         cfg = comum.carregar_config()
         grupo = next((c for c in cfg["clientes"] if c["id"] == cid), None)
@@ -446,7 +471,6 @@ def completar_custos(cliente, mk, tratado, hoje=None):
         novos = [k for k in vendidos if k not in existentes and (k.lstrip("0") or k) not in existentes][:LIMITE_AUTO]
         if not novos:
             return []
-        nome_mk = cfg.get("marketplaces", {}).get(mk, {}).get("nome", mk)
         linhas += [{"SKU": k, "Descrição": vendidos[k][:200], "Custo": None, "Categoria": ""} for k in novos]
         agora = dt.datetime.now().isoformat(timespec="seconds")
         if caminho and info is not None:
@@ -463,7 +487,7 @@ def completar_custos(cliente, mk, tratado, hoje=None):
             padrao = os.path.join(tempfile.mkdtemp(prefix="custos_"), "custos.xlsx")
             gravar_custos_padrao(linhas, padrao)
             with open(padrao, "rb") as f:
-                alvo = guardar_arquivo(cid, "custos", "criada pelo sistema (SKUs vendidos sem custo).xlsx", f.read(), chave)
+                alvo = guardar_arquivo(cid, "custos", "criada pelo sistema (%s).xlsx" % rotulo, f.read(), chave)
             alvo["versao"] = 1
             grupo.setdefault("custos_meses", {})[chave] = alvo
             grupo["custos"] = alvo
@@ -477,8 +501,8 @@ def completar_custos(cliente, mk, tratado, hoje=None):
                 auto.pop(k)
         alvo["atualizado_auto"] = agora
         comum.salvar_config(cfg)
-    comum.log("[%s] %d SKU(s) vendidos sem custo acrescentados à tabela de custos de %s (%s): %s" % (
-        cliente.get("cliente_nome") or cliente["nome"], len(novos), mes_usado or "?", nome_mk, ", ".join(novos[:10])))
+    comum.log("[%s] %d SKU(s) (%s) acrescentados à tabela de custos de %s (%s): %s" % (
+        nome_cli, len(novos), rotulo, mes_usado or "?", nome_mk, ", ".join(novos[:10])))
     return novos
 
 

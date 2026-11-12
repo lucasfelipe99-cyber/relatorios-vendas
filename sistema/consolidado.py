@@ -475,6 +475,10 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                     else:
                         sem_depara[an] = sem_depara.get(an, 0.0) + i["Gasto"]
                         nomes_sem.setdefault(an, str(i.get("Campanha") or "")[:150])
+                elif not sku and an:
+                    # anúncio com ADS sem venda no mês (e sem SKU no relatório): entra no SKU 0 e pede o SKU no sistema
+                    sem_depara[an] = sem_depara.get(an, 0.0) + i["Gasto"]
+                    nomes_sem.setdefault(an, str(i.get("Campanha") or "")[:150])
                 sku = sku or "0"
                 varios = len(lancamentos.skus_lista(sku)) > 1
                 rp = [(x, w) for x, w in _repartir(df, nome, loja, sku, rep_cache, dia=i["Data"]) if w > 0]
@@ -484,7 +488,7 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                     for (cat, sc), v in ((PUB, -i["Gasto"]), (CLQ, i["Cliques"]), (ADF, i["Receita ADS"])):
                         if v:
                             novas.append(dict(base, Categoria=cat, **{"Sub Categoria": sc, "Valor completo": v * w}))
-            if depara is not None or (mk == "tiktokshop" and sem_depara):
+            if depara is not None or sem_depara:
                 resumo["ads_sem_depara"]["%s|%s" % (u["id"], mk)] = {
                     "tem_depara": bool(depara) or mk == "tiktokshop",
                     "ids": {k: round(v, 2) for k, v in sorted(sem_depara.items(), key=lambda x: -x[1])},

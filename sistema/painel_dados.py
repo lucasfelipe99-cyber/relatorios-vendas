@@ -406,8 +406,8 @@ def resumo(cfg, cliente, ano, mes, hoje=None, filtro=None):
     for k, v in (lanc.get("ads_sem_depara") or {}).items():
         ids = v.get("ids") or {}
         if ids:
-            alertas.append({"nivel": "atencao", "titulo": "%d anúncio(s) de ADS sem SKU no de-para (%s)" % (len(ids), k.split("|")[1]),
-                            "detalhe": "Entraram com SKU 0. Ex.: " + ", ".join(list(ids)[:5]), "valor": round(-sum(ids.values()), 2), "acao": "ads"})
+            alertas.append({"nivel": "atencao", "titulo": "%d anúncio(s) de ADS sem SKU (%s)" % (len(ids), k.split("|")[1]),
+                            "detalhe": "Sem venda no mês ou sem de-para: entraram com SKU 0 — preencha SKU e descrição no card de ADS. Ex.: " + ", ".join(list(ids)[:5]), "valor": round(-sum(ids.values()), 2), "acao": "ads"})
     if lanc.get("afiliados_sem_pedido"):
         alertas.append({"nivel": "info", "titulo": "%d comissão(ões) de afiliado sem pedido nos tratados" % lanc["afiliados_sem_pedido"],
                         "detalhe": "Entraram só com a comissão, sem ligar à venda", "valor": None, "acao": "afiliados"})

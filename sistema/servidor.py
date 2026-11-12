@@ -950,8 +950,21 @@ def salvar_depara_app(dados):
     if not isinstance(itens, dict) or not itens:
         return {"ok": False, "erro": "Nada para salvar."}
     r = _lanc().salvar_depara_manual(cfg, _lanc().dono(u), mk, itens, por=dados.get("_por") or "")
+    # SKU novo (não está na tabela de custos do mês): entra na tabela com a descrição informada e custo vazio
+    novos_desc = {}
+    for v in itens.values():
+        d_ = str((v or {}).get("descricao") or "").strip()
+        for s_ in _lanc().skus_lista((v or {}).get("sku")):
+            novos_desc.setdefault(s_, d_)
+    acresc = []
+    if novos_desc:
+        m = _mes_valido(dados.get("mes")) or "%04d-%02d" % _consolidado().mes_atual()
+        try:
+            acresc = _tratador().acrescentar_skus(u["cliente_id"], int(m[:4]), int(m[5:]), novos_desc)
+        except Exception as e:
+            comum.log("de-para no app: não acrescentei os SKUs na tabela de custos (%s)" % e)
     _consolidar_depois([u["id"]], "de-para preenchido no app")
-    return dict(r, ok=True)
+    return dict(r, ok=True, na_tabela=acresc)
 
 
 def limpar_lancamento(dados):

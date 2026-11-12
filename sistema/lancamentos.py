@@ -1088,6 +1088,8 @@ def salvar_depara_manual(cfg, dono_, mk, itens, por=""):
                 tirados += 1
             continue
         atual[k] = {"sku": sku, "nome": str((v or {}).get("nome") or "")[:200], "em": agora, "por": por}
+        if (v or {}).get("descricao"):
+            atual[k]["descricao"] = str(v["descricao"]).strip()[:200]
         feitos += 1
     os.makedirs(pasta(cfg, dono_), exist_ok=True)
     arq = _depara_manual_arq(cfg, dono_, mk)
