@@ -236,8 +236,8 @@ def _repartir(df, nome, loja, sku, cache, dia=None):
     """SKU do de-para pode ser "290, 289" (anúncio com variações). Devolve [(sku, peso)].
 
     ADS (com o dia): o gasto do anúncio no dia vai para os SKUs dele que venderam naquele dia, na mesma conta,
-    proporcional às unidades vendidas. Dia sem venda de nenhum SKU do anúncio: pelas unidades do mês (na conta;
-    senão em todas), depois pelo faturamento do mês; sem nada, em partes iguais.
+    proporcional ao faturamento. Dia sem venda de nenhum SKU do anúncio: pelo faturamento do mês (na conta;
+    senão em todas); sem nada, em partes iguais. Só o faturamento é usado no ADS.
     Visitas (sem o dia): pelo faturamento do mês de cada SKU (na conta; senão em todas); sem venda, pelas unidades;
     sem nada, em partes iguais."""
     import lancamentos
@@ -248,7 +248,7 @@ def _repartir(df, nome, loja, sku, cache, dia=None):
         kd = ("dia", nome, loja, tuple(skus))
         if kd not in cache:
             b = df[(df["Marketplace"] == nome) & (df["Marketplace venda"] == loja) & df["SKU"].astype(str).isin(skus)
-                   & (df["Categoria"] == QTD[0]) & (df["Sub Categoria"] == QTD[1])]
+                   & (df["Categoria"] == FAT[0]) & (df["Sub Categoria"] == FAT[1])]
             por_dia = {}
             if len(b):
                 g = b.groupby([pd_datas(b["Data"]), b["SKU"].astype(str)])["Valor completo"].sum()
@@ -266,7 +266,7 @@ def _repartir(df, nome, loja, sku, cache, dia=None):
         base = df[(df["Marketplace"] == nome) & df["SKU"].astype(str).isin(skus)]
         for filtro in (base["Marketplace venda"] == loja, None):
             b = base[filtro] if filtro is not None else base
-            for cat in ((QTD, FAT) if dia is not None else (FAT, QTD)):
+            for cat in ((FAT,) if dia is not None else (FAT, QTD)):
                 v = b[(b["Categoria"] == cat[0]) & (b["Sub Categoria"] == cat[1])].groupby(b["SKU"].astype(str))["Valor completo"].sum()
                 tot = float(sum(max(0.0, float(v.get(x, 0.0))) for x in skus))
                 if tot > 0:
