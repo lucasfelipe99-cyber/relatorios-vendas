@@ -143,6 +143,7 @@ def montar_estado(mes=None):
         "consolidados": _consolidado().ler_estado(), "meses_consolidado": _consolidado().meses_disponiveis(cfg, quantos=12),
         "lancamentos": _situacao_lanc_mes_atual(cfg),
         "forecasts": _forecasts_definidos(cfg),
+        "acompanhamento": _acomp().contagem(cfg),
         "atividade": (_atividade().recentes(30) if _atividade() else []),
         "equipe": (_atividade().quadro(cfg) if _atividade() else {}),
     }
@@ -1676,6 +1677,21 @@ class Handler(BaseHTTPRequestHandler):
                 est = montar_estado(q.get("mes"))
                 est["eu"] = self._eu()
                 return self._enviar(200, est)
+            if url.path == "/api/acompanhamento/pdf":
+                _, usuario, _ = self._identidade()
+                try:
+                    corpo, nome = _acomp().pdf(comum.carregar_config(), {k: q.get(k, "") for k in
+                                                                         ("cliente_id", "de", "ate", "tipo", "situacao", "busca")}, usuario)
+                except ValueError as e:
+                    return self._enviar(400, {"erro": str(e)})
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Length", str(len(corpo)))
+                self.send_header("Content-Disposition", "attachment; filename=\"%s\"" % nome)
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(corpo)
+                return
             if url.path == "/api/equipe":
                 at = _atividade()
                 return self._enviar(200, {"quadro": at.quadro(comum.carregar_config()), "recentes": at.recentes(30), "eu": self._eu()})
@@ -1721,6 +1737,8 @@ class Handler(BaseHTTPRequestHandler):
             tam = int(self.headers.get("Content-Length") or 0)
             dados = json.loads(self.rfile.read(tam) or b"{}") if tam else {}
             dados["_por"] = usuario
+            u = getattr(self, "_usuario", None) or {}
+            dados["_login"], dados["_admin"] = u.get("login", ""), u.get("perfil") == "admin"
             at = _atividade()
             desc = at.descrever(caminho, dados, comum.carregar_config()) if at else None
             t0 = time.time()
@@ -1954,6 +1972,44 @@ def admin_importar(dados):
 
 
 ACOES["/api/admin/importar"] = admin_importar
+
+
+# ---------------------------------------------------------------- acompanhamento dos clientes
+def _acomp():
+    import acompanhamento
+    return acompanhamento
+
+
+def acomp_listar(dados):
+    cfg = comum.carregar_config()
+    A = _acomp()
+    try:
+        itens = A.listar(cfg, **{k: dados.get(k) or "" for k in ("cliente_id", "de", "ate", "tipo", "situacao", "busca")})
+    except ValueError as e:
+        return {"ok": False, "erro": str(e)}
+    return {"ok": True, "itens": itens, "tipos": A.TIPOS, "situacoes": A.SITUACOES, "contagem": A.contagem(cfg)}
+
+
+def acomp_salvar(dados):
+    try:
+        it = _acomp().salvar(comum.carregar_config(), dados, dados.get("_por") or "", dados.get("_login") or "")
+    except ValueError as e:
+        return {"ok": False, "erro": str(e)}
+    return {"ok": True, "item": it}
+
+
+def acomp_remover(dados):
+    try:
+        ok = _acomp().remover(comum.carregar_config(), dados.get("cliente_id") or "", dados.get("id") or "",
+                              dados.get("_login") or "", bool(dados.get("_admin")))
+    except ValueError as e:
+        return {"ok": False, "erro": str(e)}
+    return {"ok": ok} if ok else {"ok": False, "erro": "Registro não encontrado."}
+
+
+ACOES["/api/acompanhamento/listar"] = acomp_listar
+ACOES["/api/acompanhamento/salvar"] = acomp_salvar
+ACOES["/api/acompanhamento/remover"] = acomp_remover
 
 
 def _aquecer_painel(espera=0):

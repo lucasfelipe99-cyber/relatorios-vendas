@@ -26,7 +26,7 @@ TTL_PRESENCA = 45
 TTL_ACAO = 30 * 60
 
 ABAS = {"status": "Painel geral", "vendas": "Vendas", "tratamento": "Tratamento", "ads": "ADS", "afiliados": "Afiliados",
-        "pacote": "Pacote final", "meses": "Mês a mês", "forecast": "Forecast", "planilhas": "Planilhas", "clientes": "Clientes",
+        "pacote": "Pacote final", "meses": "Mês a mês", "forecast": "Forecast", "planilhas": "Planilhas", "clientes": "Clientes", "acomp": "Acompanhamento",
         "visitas": "Visita & Conversão", "traducao": "Tradução de SKU", "custos": "Custos e imposto", "usuarios": "Usuários",
         "ajuda": "Ajuda"}
 
@@ -89,6 +89,8 @@ def descrever(caminho, dados, cfg):
         "/api/cliente/antecipa": ("alterando antecipação Shopee", "cliente|%s" % cid, False),
         "/api/cliente": (("salvando cadastro" if dados.get("id") else "cadastrando cliente novo"), "cadastro|%s" % (dados.get("id") or dados.get("nome")), True),
         "/api/cliente/remover": ("removendo cliente", "cadastro|%s" % dados.get("id"), True),
+        "/api/acompanhamento/salvar": ("registrando acompanhamento", "acomp|%s|%s" % (cid, dados.get("id") or "novo"), False),
+        "/api/acompanhamento/remover": ("removendo registro de acompanhamento", "acomp|%s|%s" % (cid, dados.get("id")), False),
         "/api/consolidado/gerar": ("gerando pacote final", "pacote|%s" % cid, True),
         "/api/forecast/definir": ("definindo forecast", "forecast|%s" % cid, False),
         "/api/organizar": ("rodando o organizador", "organizar", True),
@@ -114,6 +116,8 @@ def descrever(caminho, dados, cfg):
         "/api/cliente/antecipa": "alterou a antecipação Shopee",
         "/api/cliente": "salvou o cadastro" if dados.get("id") else "cadastrou cliente novo",
         "/api/cliente/remover": "removeu cliente",
+        "/api/acompanhamento/salvar": "atualizou um registro de acompanhamento" if dados.get("id") else "registrou acompanhamento",
+        "/api/acompanhamento/remover": "removeu um registro de acompanhamento",
         "/api/consolidado/gerar": "gerou o pacote final",
         "/api/forecast/definir": "definiu o forecast",
         "/api/organizar": "rodou o organizador",
