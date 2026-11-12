@@ -261,21 +261,30 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
 #nav button.on .nav-n{background:rgba(255,255,255,.25);color:#fff}
 #ac-filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
 #ac-filtros input,#ac-filtros select{padding:6px 8px;border:1px solid var(--li);border-radius:6px;background:var(--bg);color:var(--tx)}
-.ac-res{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 12px}
-.ac-mes{font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px}
-.ac-it{display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:start;background:var(--card);border:1px solid var(--li);border-left:4px solid var(--st-off);border-radius:10px;padding:12px 14px;margin-bottom:8px}
-.ac-it.aberto{border-left-color:var(--err)}.ac-it.andamento{border-left-color:var(--war)}.ac-it.resolvido{border-left-color:var(--ok)}
-.ac-dt{font-size:13px;font-weight:700}.ac-dt span{display:block;font-size:11.5px;font-weight:500;color:var(--mut)}
-.ac-as{font-weight:700;font-size:14px;margin-bottom:3px}
-.ac-tx{white-space:pre-wrap;font-size:13px;margin-top:6px;line-height:1.45}
-.ac-meta{font-size:11.5px;color:var(--mut);margin-top:6px}
+.ac-ficha{background:var(--bg);border:1px solid var(--li);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+.ac-ficha .ac-st{font-size:16px;font-weight:700;margin:2px 0 8px}
+.ac-ficha .lb{font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-top:10px}
+.ac-ficha .tx{white-space:pre-wrap;font-size:13.5px;line-height:1.5;margin-top:2px}
+.ac-ficha .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:4px 18px}
+.ac-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;align-items:start}
+.ac-bl h3{font-size:13px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.ac-bl h3 i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.ac-vazio{font-size:12.5px;color:var(--mut);padding:10px;border:1px dashed var(--li);border-radius:9px}
+.ac-it{background:var(--card);border:1px solid var(--li);border-left:4px solid var(--st-off);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.ac-it.atencao{border-left-color:var(--err)}.ac-it.aberto{border-left-color:var(--pri)}.ac-it.andamento{border-left-color:var(--war)}.ac-it.resolvido{border-left-color:var(--ok)}
+.ac-it .hd{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.ac-as{font-weight:600;font-size:13.5px;line-height:1.4}
+.ac-tx{white-space:pre-wrap;font-size:13px;margin-top:5px;line-height:1.45;color:var(--tx)}
+.ac-meta{font-size:11.5px;color:var(--mut);margin-top:5px}
 .ac-meta .venc{color:var(--err);font-weight:700}
-.ac-ac{display:flex;gap:6px;align-items:center}
-.ac-cli{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:12px}
-.ac-cli a{display:block;text-decoration:none;color:var(--tx);background:var(--bg);border:1px solid var(--li);border-radius:9px;padding:10px 12px}
+.ac-ac{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.ac-cli{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-bottom:16px}
+.ac-cli a{display:block;text-decoration:none;color:var(--tx);background:var(--bg);border:1px solid var(--li);border-radius:10px;padding:11px 13px}
 .ac-cli a:hover{border-color:var(--pri)}
-.ac-cli b{display:block;font-size:13.5px}.ac-cli span{font-size:12px;color:var(--mut)}
-@media (max-width:700px){.ac-it{grid-template-columns:1fr}.ac-ac{justify-content:flex-start}}
+.ac-cli b{display:block;font-size:14px}.ac-cli .s{display:block;font-size:12.5px;color:var(--tx);margin:3px 0 6px;line-height:1.35}
+.ac-niv{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:99px;margin-left:6px;vertical-align:middle}
+.ac-niv.alta{background:var(--errbg);color:var(--err)}.ac-niv.media{background:var(--warbg);color:var(--war)}.ac-niv.baixa{background:var(--bg);color:var(--mut);border:1px solid var(--li)}
+.ac-geral{margin-top:16px;background:var(--bg);border:1px solid var(--li);border-radius:12px;padding:14px 16px}
 #s-ajuda .card ol li::marker{color:var(--pri);font-weight:700}
 #s-ajuda .card{border-left:3px solid var(--pri)}
 #pl-lista{border-radius:10px}.pl-i{border-radius:7px}
@@ -512,20 +521,20 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
   <div class="card">
     <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
       <div><h2 style="margin:0" id="ac-tit">Acompanhamento</h2>
-        <div class="small mut" style="margin-top:4px">O que está acontecendo com cada cliente: reuniões, contatos, problemas, pendências e combinados. Fica registrado quem anotou e quando.</div></div>
-      <div style="display:flex;gap:8px"><button class="b" onclick="acPdf()" title="Baixa um PDF com os registros filtrados e os números do mês do cliente">Exportar PDF</button><button class="b pri" onclick="acEditar()">+ Novo registro</button></div>
+        <div class="small mut" style="margin-top:4px">O que já foi realizado, o que está programado e os pontos de atenção de cada cliente. Fica registrado quem anotou e quando.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="b" id="ac-imp" hidden onclick="acImportar()" title="Importar fichas e registros de um arquivo .json">Importar</button><button class="b" onclick="acPdf()" title="Baixa o relatório de acompanhamento em PDF (com os filtros da tela)">Exportar PDF</button><button class="b pri" onclick="acEditar()">+ Novo registro</button></div>
     </div>
     <div id="ac-filtros">
       <label class="small">De <input type="date" id="ac-de" onchange="rAcomp()"></label>
       <label class="small">até <input type="date" id="ac-ate" onchange="rAcomp()"></label>
       <select id="ac-tipo" onchange="rAcomp()"><option value="">Todos os tipos</option></select>
-      <select id="ac-sit" onchange="rAcomp()"><option value="">Todas as situações</option><option value="pendentes">Em aberto + em andamento</option></select>
+      <select id="ac-sit" onchange="rAcomp()"><option value="">Tudo</option><option value="pendentes">Só o que falta fazer</option><option value="aberto">A fazer</option><option value="andamento">Em andamento</option><option value="resolvido">Realizado</option></select>
       <input type="search" id="ac-busca" placeholder="Buscar no assunto ou texto" autocomplete="off" style="min-width:220px" oninput="clearTimeout(window._acT);window._acT=setTimeout(rAcomp,300)">
       <button class="b" onclick="acLimpar()">Limpar filtros</button>
     </div>
-    <div id="ac-clientes"></div>
-    <div class="ac-res" id="ac-res"></div>
+    <div id="ac-topo"></div>
     <div id="ac-lista"><div class="mut small">Carregando…</div></div>
+    <div id="ac-geral"></div>
   </div>
 </section>
 
@@ -538,7 +547,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
       <li><b>ADS</b>, <b>Afiliados</b> e <b>Visita &amp; Conversão</b>: suba os relatórios de cada conta e marketplace do cliente escolhido no topo.</li>
       <li><b>Pacote final</b>: é gerado sozinho depois dos tratados e conferido contra eles. Baixe o .xlsx de cada cliente (ou todos num .zip).</li>
       <li><b>Painel geral</b>: números do mês tirados do pacote final, por marketplace, conta e dia.</li>
-      <li><b>Acompanhamento</b>: anote o que acontece com cada cliente (reuniões, problemas, combinados, pendências com prazo). <b>Exportar PDF</b> baixa os registros filtrados com os números do mês.</li>
+      <li><b>Acompanhamento</b>: a ficha de cada cliente (status, contexto, objetivo) com o que já foi <b>realizado</b>, o que está <b>programado</b> e os <b>pontos de atenção</b>. <b>Exportar PDF</b> baixa o relatório de acompanhamento.</li>
     </ol>
   </div>
   <div class="card">
@@ -1157,69 +1166,113 @@ async function rUsuarios(){if(!E)return;const eu=E.eu||{};
     <td style="white-space:nowrap">${u.principal?'<span class="small mut">senha no Render</span>':`<button class="bs" onclick="usEditar(${i})">Editar</button> <button class="bs" style="color:var(--err)" onclick="usRemover(${i})">Remover</button>`}</td></tr>`).join("")}</tbody>`}
 window.rUsuarios=rUsuarios;
 // ---------------------------------------------------------------- acompanhamento dos clientes
-let AC={itens:[],tipos:[],situacoes:{}};
-const AC_SIT={aberto:["p-err","Aberto"],andamento:["p-war","Em andamento"],resolvido:["p-ok","Resolvido"]};
+let AC={itens:[],tipos:[],situacoes:{},fichas:{},niveis:{},contagem:{},visao_geral:{}};
+const AC_SIT={aberto:["p-war","A fazer"],andamento:["p-war","Em andamento"],resolvido:["p-ok","Realizado"]};
 const acHoje=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const acBR=d=>d?d.slice(8,10)+"/"+d.slice(5,7)+"/"+d.slice(0,4):"";
-const MESES_N=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
 function acFiltro(){return {cliente_id:cliSel(),de:$("#ac-de").value,ate:$("#ac-ate").value,tipo:$("#ac-tipo").value,
   situacao:$("#ac-sit").value,busca:$("#ac-busca").value.trim()}}
 window.acLimpar=()=>{["#ac-de","#ac-ate","#ac-tipo","#ac-sit","#ac-busca"].forEach(k=>$(k).value="");rAcomp()};
-function acNav(cont){const n=Object.values(cont||{}).reduce((s,x)=>s+(x.abertos||0),0),el=$("#nav-acomp-n");if(!el)return;el.hidden=!n;el.textContent=n}
+function acNav(cont){const n=Object.values(cont||{}).reduce((s,x)=>s+(x.vencidos||0),0),el=$("#nav-acomp-n");if(!el)return;
+  el.hidden=!n;el.textContent=n;el.title=n?`${n} registro(s) com prazo vencido`:""}
+const acNiv=n=>n&&AC.niveis[n]?`<span class="ac-niv ${esc(n)}">prioridade ${esc(AC.niveis[n].toLowerCase())}</span>`:"";
+function acItem(it,i,todos){const sit=it.situacao||"aberto",at=it.tipo==="Ponto de atenção"&&sit!=="resolvido",venc=sit!=="resolvido"&&it.prazo&&it.prazo<acHoje();
+  const meta=[esc(it.tipo),it.canal?esc(it.canal):"",it.responsavel?`responsável: <b>${esc(it.responsavel)}</b>`:"",
+    it.prazo?`<span class="${venc?"venc":""}">prazo ${acBR(it.prazo)}${venc?" (vencido)":""}</span>`:"",`${acBR(it.data)} · ${esc(it.criado_por||"?")}`,
+    it.alterado_por?`alterado por ${esc(it.alterado_por)}`:""].filter(Boolean).join(" · ");
+  const eu=(E.eu||{}).login,pode=(E.eu||{}).admin||it.criado_login===eu;
+  return `<div class="ac-it ${at?"atencao":esc(sit)}"><div class="hd"><div class="ac-as">${todos?`<span class="chipx n" style="margin-right:6px">${esc(it.cliente)}</span>`:""}${esc(it.assunto)}</div>
+    <div class="ac-ac">${sit==="andamento"?'<span class="pill p-war">em andamento</span>':""}${sit!=="resolvido"?`<button class="bs" onclick="acResolver(${i})" title="Marcar como realizado">✓</button>`:""}${menu([mi("Editar",`acEditar(${i})`),
+      sit==="resolvido"?mi("Voltar para a fazer",`acSituacao(${i},"aberto")`):sit==="andamento"?mi("Voltar para a fazer",`acSituacao(${i},"aberto")`):mi("Em andamento",`acSituacao(${i},"andamento")`),
+      pode?"-":"",pode?mi("Remover",`acRemover(${i})`,"dan"):""])}</div></div>
+    ${it.texto?`<div class="ac-tx">${esc(it.texto)}</div>`:""}<div class="ac-meta">${meta}</div></div>`}
+function acBlocos(L,todos){const idx=it=>L.indexOf(it);
+  const atencao=L.filter(x=>x.tipo==="Ponto de atenção"&&x.situacao!=="resolvido"),fazer=L.filter(x=>x.situacao!=="resolvido"&&!atencao.includes(x)),feito=L.filter(x=>x.situacao==="resolvido");
+  fazer.sort((a,b)=>(a.prazo||"9999").localeCompare(b.prazo||"9999")||b.data.localeCompare(a.data));
+  const bl=(tit,cor,lst,vz)=>`<div class="ac-bl"><h3><i style="background:${cor}"></i>${tit} <span class="mut" style="font-weight:500">${lst.length}</span></h3>${lst.length?lst.map(x=>acItem(x,idx(x),todos)).join(""):`<div class="ac-vazio">${vz}</div>`}</div>`;
+  return `<div class="ac-col">${bl("Pontos de atenção","var(--err)",atencao,"Nenhum ponto de atenção em aberto.")}${bl("Programado","var(--pri)",fazer,"Nada programado.")}${bl("Realizado","var(--ok)",feito,"Nada realizado ainda.")}</div>`}
 async function rAcomp(){if(!E)return;const f=acFiltro(),cid=f.cliente_id,c=E.config.clientes.find(x=>x.id===cid);
-  $("#ac-tit").textContent="Acompanhamento — "+(c?c.nome:"todos os clientes");
+  $("#ac-tit").textContent="Acompanhamento — "+(c?c.nome:"todos os clientes");$("#ac-imp").hidden=!(E.eu||{}).admin;
   const r=await post("/api/acompanhamento/listar",f);if(!r.ok){$("#ac-lista").innerHTML=`<div class="erro">${esc(r.erro||"erro")}</div>`;return}
-  AC=r;acNav(r.contagem);
+  AC=r;acNav(r.contagem);window._acL=r.itens;const L=r.itens;
   const st=$("#ac-tipo"),v=st.value;st.innerHTML='<option value="">Todos os tipos</option>'+r.tipos.map(t=>`<option>${esc(t)}</option>`).join("");st.value=v;
-  const L=r.itens;
-  // visão de todos os clientes: um cartão por cliente com o que está em aberto
-  if(!cid){const C=E.config.clientes.filter(x=>x.ativo!==false);
-    $("#ac-clientes").innerHTML=`<div class="ac-cli">${C.map(x=>{const k=r.contagem[x.id]||{};return `<a href="#" onclick='selCliente(${JSON.stringify(x.id)});return false'><b>${esc(x.nome)}</b><span>${k.abertos?`<span style="color:var(--err);font-weight:700">${k.abertos} pendente(s)</span> · `:""}${k.total||0} registro(s)${k.ultimo?" · último "+acBR(k.ultimo):""}</span></a>`}).join("")}</div>`}
-  else $("#ac-clientes").innerHTML="";
-  const ab=L.filter(i=>i.situacao==="aberto").length,an=L.filter(i=>i.situacao==="andamento").length,rs=L.filter(i=>i.situacao==="resolvido").length,
-    venc=L.filter(i=>i.situacao!=="resolvido"&&i.prazo&&i.prazo<acHoje()).length;
-  $("#ac-res").innerHTML=`<span class="chipx n">${L.length} registro(s)</span>${ab?`<span class="chipx e">${ab} aberto(s)</span>`:""}${an?`<span class="chipx w">${an} em andamento</span>`:""}${rs?`<span class="chipx o">${rs} resolvido(s)</span>`:""}${venc?`<span class="chipx e">${venc} com prazo vencido</span>`:""}`;
-  if(!L.length){$("#ac-lista").innerHTML=`<div class="card pn-vazio" style="text-align:center;padding:28px">${r.itens.length?"Nada com esses filtros.":"Nenhum registro ainda"+(c?` para ${esc(c.nome)}`:"")+". Clique em <b>+ Novo registro</b>."}</div>`;return}
-  let h="",mesAnt="";const eu=(E.eu||{}).login,adm=(E.eu||{}).admin;
-  L.forEach((it,i)=>{const m=it.data.slice(0,7);if(m!==mesAnt){mesAnt=m;h+=`<div class="ac-mes">${MESES_N[+m.slice(5)-1]} de ${m.slice(0,4)}</div>`}
-    const [cls,rot]=AC_SIT[it.situacao]||AC_SIT.aberto,vencido=it.situacao!=="resolvido"&&it.prazo&&it.prazo<acHoje();
-    const meta=[`registrado por ${esc(it.criado_por||"?")}`,it.responsavel?`responsável: <b>${esc(it.responsavel)}</b>`:"",
-      it.prazo?`<span class="${vencido?"venc":""}">prazo ${acBR(it.prazo)}${vencido?" (vencido)":""}</span>`:"",it.alterado_por?`alterado por ${esc(it.alterado_por)} em ${acBR((it.alterado_em||"").slice(0,10))}`:""].filter(Boolean).join(" · ");
-    const pode=adm||it.criado_login===eu;
-    h+=`<div class="ac-it ${esc(it.situacao)}"><div class="ac-dt">${acBR(it.data)}<span>${esc(it.tipo)}</span></div>
-      <div><div class="ac-as">${!cid?`<span class="chipx n" style="margin-right:6px">${esc(it.cliente)}</span>`:""}${esc(it.assunto)}</div>${it.texto?`<div class="ac-tx">${esc(it.texto)}</div>`:""}<div class="ac-meta">${meta}</div></div>
-      <div class="ac-ac"><span class="pill ${cls}">${rot}</span>${it.situacao!=="resolvido"?`<button class="bs" onclick="acResolver(${i})" title="Marcar como resolvido">✓</button>`:""}${menu([mi("Editar",`acEditar(${i})`),
-        it.situacao==="resolvido"?mi("Reabrir",`acSituacao(${i},"aberto")`):mi("Em andamento",`acSituacao(${i},"andamento")`),pode?"-":"",pode?mi("Remover",`acRemover(${i})`,"dan"):""])}</div></div>`});
-  $("#ac-lista").innerHTML=h;window._acL=L}
+  if(c){const fi=r.fichas[cid]||{},tem=["status","resumo","contexto","prioridade","objetivo"].some(k=>fi[k]);
+    $("#ac-topo").innerHTML=`<div class="ac-ficha"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+      <div><div class="lb" style="margin-top:0">Status</div><div class="ac-st">${tem?esc(fi.status||"—"):'<span class="mut" style="font-weight:500">Ficha ainda não preenchida</span>'}${acNiv(fi.nivel)}</div></div>
+      <button class="b" onclick="acFicha()">${tem?"Editar ficha":"Preencher ficha"}</button></div>
+      ${fi.contexto?`<div class="tx">${esc(fi.contexto)}</div>`:""}
+      ${fi.resumo||fi.prioridade?`<div class="g">${fi.resumo?`<div><div class="lb">Situação atual</div><div class="tx">${esc(fi.resumo)}</div></div>`:""}${fi.prioridade?`<div><div class="lb">Prioridade estratégica</div><div class="tx">${esc(fi.prioridade)}</div></div>`:""}</div>`:""}
+      ${fi.objetivo?`<div class="lb">Objetivo</div><div class="tx">${esc(fi.objetivo)}</div>`:""}
+      ${fi.atualizado_por?`<div class="small mut" style="margin-top:10px">Ficha atualizada por ${esc(fi.atualizado_por)} em ${acBR((fi.atualizado_em||"").slice(0,10))}</div>`:""}</div>`;
+    $("#ac-geral").innerHTML=""}
+  else{const C=E.config.clientes.filter(x=>x.ativo!==false);
+    $("#ac-topo").innerHTML=`<div class="ac-cli">${C.map(x=>{const k=r.contagem[x.id]||{};return `<a href="#" onclick='selCliente(${JSON.stringify(x.id)});return false'><b>${esc(x.nome)}${acNiv(k.nivel)}</b><span class="s">${esc(k.status||"")||'<span class="mut">sem ficha</span>'}</span>
+      <span class="small mut">${k.atencao?`<span style="color:var(--err);font-weight:700">${k.atencao} atenção</span> · `:""}${k.abertos-(k.atencao||0)} programado(s) · ${k.realizados||0} realizado(s)${k.vencidos?` · <span style="color:var(--err);font-weight:700">${k.vencidos} vencido(s)</span>`:""}</span></a>`}).join("")}</div>`;
+    const vg=r.visao_geral||{};
+    $("#ac-geral").innerHTML=`<div class="ac-geral"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0;font-size:14px">Direcionamento geral</h3><button class="b" onclick="acVisao()">${vg.texto?"Editar":"Escrever"}</button></div>
+      ${vg.texto?`<div class="ac-tx" style="margin-top:8px">${esc(vg.texto)}</div><div class="small mut" style="margin-top:8px">Atualizado por ${esc(vg.atualizado_por||"?")} em ${acBR((vg.atualizado_em||"").slice(0,10))}</div>`:'<div class="small mut" style="margin-top:6px">O direcionamento das próximas semanas para todos os clientes. Entra no fim do PDF.</div>'}</div>`}
+  if(!L.length){$("#ac-lista").innerHTML=`<div class="ac-vazio" style="text-align:center;padding:22px">${r.contagem&&Object.values(r.contagem).some(x=>x.total)&&(f.de||f.ate||f.tipo||f.situacao||f.busca)?"Nada com esses filtros.":"Nenhum registro ainda"+(c?` para ${esc(c.nome)}`:"")+". Clique em <b>+ Novo registro</b>."}</div>`;return}
+  $("#ac-lista").innerHTML=acBlocos(L,!c)}
 window.rAcomp=rAcomp;
-window.acSituacao=async(i,sit)=>{const it=window._acL[i];const r=await post("/api/acompanhamento/salvar",{...it,situacao:sit});toast(r.ok?"Situação: "+AC_SIT[sit][1]:r.erro);rAcomp()};
+window.acSituacao=async(i,sit)=>{const it=window._acL[i];const r=await post("/api/acompanhamento/salvar",{...it,situacao:sit});toast(r.ok?"Agora: "+AC_SIT[sit][1]:r.erro);rAcomp()};
 window.acResolver=i=>acSituacao(i,"resolvido");
-window.acRemover=async i=>{const it=window._acL[i];if(!confirm(`Remover o registro "${it.assunto}" de ${acBR(it.data)}? Não dá para desfazer.`))return;
+window.acRemover=async i=>{const it=window._acL[i];if(!confirm(`Remover o registro "${it.assunto}"? Não dá para desfazer.`))return;
   const r=await post("/api/acompanhamento/remover",{cliente_id:it.cliente_id,id:it.id});toast(r.ok?"Registro removido":r.erro);rAcomp()};
-window.acEditar=i=>{const it=i==null?null:window._acL[i];let dlg=document.getElementById("dlg-ac");
-  if(!dlg){dlg=document.createElement("dialog");dlg.id="dlg-ac";dlg.style.cssText="border:1px solid var(--li);border-radius:12px;padding:0;max-width:620px;width:calc(100% - 32px);background:var(--card);color:var(--tx)";document.body.appendChild(dlg)}
-  const inp="width:100%;padding:8px;border:1px solid var(--li);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit",cid=it?it.cliente_id:cliSel();
-  const cls=E.config.clientes.filter(x=>x.ativo!==false||x.id===cid),tipos=AC.tipos.length?AC.tipos:["Reunião","Contato","Problema","Pendência","Combinado","Observação"];
+function acDlg(id,larg){let dlg=document.getElementById(id);if(!dlg){dlg=document.createElement("dialog");dlg.id=id;
+  dlg.style.cssText=`border:1px solid var(--li);border-radius:12px;padding:0;max-width:${larg}px;width:calc(100% - 32px);background:var(--card);color:var(--tx)`;document.body.appendChild(dlg)}return dlg}
+const AC_INP="width:100%;padding:8px;border:1px solid var(--li);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;font-size:13.5px";
+window.acEditar=(i,padrao)=>{const it=i==null?null:window._acL[i],dlg=acDlg("dlg-ac",640),inp=AC_INP,cid=it?it.cliente_id:cliSel();padrao=padrao||{};
+  const cls=E.config.clientes.filter(x=>x.ativo!==false||x.id===cid),tipos=AC.tipos.length?AC.tipos:["Ação","Ponto de atenção","Reunião","Contato","Problema","Pendência","Combinado","Observação"];
+  const cliObj=E.config.clientes.find(x=>x.id===cid),canais=[...new Set(["Geral",...(cliObj?(cliObj.contas||[]).flatMap(ct=>(ct.marketplaces||[]).map(m=>E.config.marketplaces[m]?.nome||m)):[])])];
+  const tipoAt=it?it.tipo:(padrao.tipo||"Ação"),sitAt=it?it.situacao:(padrao.situacao||"aberto");
   dlg.innerHTML=`<form method="dialog" style="padding:18px;display:grid;gap:10px"><h2 style="margin:0;font-size:16px">${it?"Editar registro":"Novo registro"}</h2>
     <label class="small">Cliente<br><select id="da-cli" style="${inp}" ${it?"disabled":""}>${cid?"":'<option value="">Escolha o cliente</option>'}${cls.map(x=>`<option value="${esc(x.id)}"${x.id===cid?" selected":""}>${esc(x.nome)}</option>`).join("")}</select></label>
     <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-      <label class="small">Data<br><input type="date" id="da-data" value="${esc(it?it.data:acHoje())}" style="${inp}"></label>
-      <label class="small">Tipo<br><select id="da-tipo" style="${inp}">${tipos.map(t=>`<option${(it?it.tipo:"Observação")===t?" selected":""}>${esc(t)}</option>`).join("")}</select></label>
-      <label class="small">Situação<br><select id="da-sit" style="${inp}">${Object.entries(AC_SIT).map(([k,[,r]])=>`<option value="${k}"${(it?it.situacao:"aberto")===k?" selected":""}>${r}</option>`).join("")}</select></label></div>
-    <label class="small">Assunto<br><input id="da-ass" maxlength="160" value="${esc(it?it.assunto:"")}" style="${inp}" placeholder="Ex.: Cliente pediu para incluir a loja nova na Shopee" autocomplete="off"></label>
-    <label class="small">O que aconteceu / detalhes<br><textarea id="da-tx" style="${inp};min-height:130px;font-family:inherit;font-size:13.5px" placeholder="Contexto, o que foi combinado, próximos passos…">${esc(it?it.texto:"")}</textarea></label>
-    <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
+      <label class="small">Situação<br><select id="da-sit" style="${inp}">${Object.entries(AC_SIT).map(([k,[,r]])=>`<option value="${k}"${sitAt===k?" selected":""}>${r}</option>`).join("")}</select></label>
+      <label class="small">Tipo<br><select id="da-tipo" style="${inp}">${tipos.map(t=>`<option${tipoAt===t?" selected":""}>${esc(t)}</option>`).join("")}</select></label>
+      <label class="small">Data<br><input type="date" id="da-data" value="${esc(it?it.data:acHoje())}" style="${inp}"></label></div>
+    <label class="small">Assunto<br><input id="da-ass" maxlength="240" value="${esc(it?it.assunto:"")}" style="${inp}" placeholder="Ex.: Revisar os preços de venda da Shopee" autocomplete="off"></label>
+    <label class="small">Detalhes (opcional)<br><textarea id="da-tx" style="${inp};min-height:110px" placeholder="Contexto, o que foi combinado, próximos passos…">${esc(it?it.texto:"")}</textarea></label>
+    <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <label class="small">Canal / frente (opcional)<br><input id="da-canal" list="da-canais" value="${esc(it?it.canal||"":"")}" style="${inp}" placeholder="Ex.: Shopee" autocomplete="off"></label>
       <label class="small">Responsável (opcional)<br><input id="da-resp" list="da-pessoas" value="${esc(it?it.responsavel||"":"")}" style="${inp}" autocomplete="off"></label>
       <label class="small">Prazo (opcional)<br><input type="date" id="da-prazo" value="${esc(it?it.prazo||"":"")}" style="${inp}"></label></div>
+    <datalist id="da-canais">${canais.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
     <datalist id="da-pessoas">${[...new Set([(E.eu||{}).usuario,...((E.equipe||{}).presenca||[]).map(p=>p.usuario)].filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
     <div id="da-msg"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="b" value="x">Cancelar</button><button class="b pri" id="da-ok" type="button">Salvar</button></div></form>`;
   dlg.querySelector("#da-ok").onclick=async e=>{e.target.disabled=true;
     const r=await post("/api/acompanhamento/salvar",{id:it?it.id:null,cliente_id:it?it.cliente_id:$("#da-cli").value,data:$("#da-data").value,tipo:$("#da-tipo").value,
-      situacao:$("#da-sit").value,assunto:$("#da-ass").value,texto:$("#da-tx").value,responsavel:$("#da-resp").value,prazo:$("#da-prazo").value});
+      situacao:$("#da-sit").value,assunto:$("#da-ass").value,texto:$("#da-tx").value,canal:$("#da-canal").value,responsavel:$("#da-resp").value,prazo:$("#da-prazo").value});
     e.target.disabled=false;if(!r.ok){$("#da-msg").innerHTML=`<div class="erro">${esc(r.erro||"erro")}</div>`;return}
     dlg.close();toast("Registro salvo");rAcomp()};
   dlg.showModal();setTimeout(()=>$(it?"#da-tx":"#da-ass").focus(),50)};
+window.acFicha=()=>{const cid=cliSel(),c=E.config.clientes.find(x=>x.id===cid);if(!c)return;const fi=AC.fichas[cid]||{},dlg=acDlg("dlg-acf",680),inp=AC_INP;
+  dlg.innerHTML=`<form method="dialog" style="padding:18px;display:grid;gap:10px"><h2 style="margin:0;font-size:16px">Ficha de acompanhamento — ${esc(c.nome)}</h2>
+    <div class="grid2" style="grid-template-columns:1fr 160px;gap:10px"><label class="small">Status<br><input id="df-status" value="${esc(fi.status||"")}" style="${inp}" placeholder="Ex.: Estruturação financeira e revisão da rentabilidade"></label>
+      <label class="small">Prioridade<br><select id="df-nivel" style="${inp}"><option value="">—</option>${Object.entries(AC.niveis||{}).map(([k,v])=>`<option value="${k}"${fi.nivel===k?" selected":""}>${v}</option>`).join("")}</select></label></div>
+    <label class="small">Contexto<br><textarea id="df-contexto" style="${inp};min-height:110px" placeholder="O que está acontecendo com o cliente">${esc(fi.contexto||"")}</textarea></label>
+    <div class="grid2" style="gap:10px"><label class="small">Situação atual (resumo curto)<br><input id="df-resumo" value="${esc(fi.resumo||"")}" style="${inp}"></label>
+      <label class="small">Prioridade estratégica<br><input id="df-prio" value="${esc(fi.prioridade||"")}" style="${inp}"></label></div>
+    <label class="small">Objetivo<br><textarea id="df-obj" style="${inp};min-height:60px">${esc(fi.objetivo||"")}</textarea></label>
+    <div id="df-msg"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="b" value="x">Cancelar</button><button class="b pri" id="df-ok" type="button">Salvar</button></div></form>`;
+  dlg.querySelector("#df-ok").onclick=async()=>{const r=await post("/api/acompanhamento/ficha",{cliente_id:cid,ficha:{status:$("#df-status").value,nivel:$("#df-nivel").value,
+      contexto:$("#df-contexto").value,resumo:$("#df-resumo").value,prioridade:$("#df-prio").value,objetivo:$("#df-obj").value}});
+    if(!r.ok){$("#df-msg").innerHTML=`<div class="erro">${esc(r.erro||"erro")}</div>`;return}dlg.close();toast("Ficha salva");rAcomp()};
+  dlg.showModal()};
+window.acVisao=()=>{const vg=AC.visao_geral||{},dlg=acDlg("dlg-acv",680);
+  dlg.innerHTML=`<form method="dialog" style="padding:18px;display:grid;gap:10px"><h2 style="margin:0;font-size:16px">Direcionamento geral</h2>
+    <textarea id="dv-tx" style="${AC_INP};min-height:220px" placeholder="Frentes estratégicas e o foco das próximas semanas para todos os clientes">${esc(vg.texto||"")}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="b" value="x">Cancelar</button><button class="b pri" id="dv-ok" type="button">Salvar</button></div></form>`;
+  dlg.querySelector("#dv-ok").onclick=async()=>{const r=await post("/api/acompanhamento/visao",{texto:$("#dv-tx").value});if(r.ok){dlg.close();toast("Salvo");rAcomp()}};
+  dlg.showModal()};
+window.acImportar=()=>{const i=document.createElement("input");i.type="file";i.accept=".json,application/json";
+  i.onchange=async()=>{const f=i.files[0];if(!f)return;const t=await f.text();
+    const r=await post("/api/acompanhamento/importar",{conteudo:t});
+    if(!r.ok)return alert("Não importei: "+(r.erro||"erro"));
+    alert(`Importado: ${r.clientes} cliente(s), ${r.fichas} ficha(s), ${r.novos} registro(s) novo(s), ${r.atualizados} atualizado(s)${r.visao_geral?", direcionamento geral":""}.${r.nao_encontrados.length?"\n\nClientes não encontrados: "+r.nao_encontrados.join(", "):""}`);rAcomp()};
+  i.click()};
 window.acPdf=()=>{const f=acFiltro(),q=new URLSearchParams();
   Object.entries(f).forEach(([k,v])=>{if(v)q.set(k,v)});
   const a=document.createElement("a");a.href="/api/acompanhamento/pdf?"+q.toString();a.download="";document.body.appendChild(a);a.click();a.remove()};

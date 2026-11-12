@@ -1987,7 +1987,8 @@ def acomp_listar(dados):
         itens = A.listar(cfg, **{k: dados.get(k) or "" for k in ("cliente_id", "de", "ate", "tipo", "situacao", "busca")})
     except ValueError as e:
         return {"ok": False, "erro": str(e)}
-    return {"ok": True, "itens": itens, "tipos": A.TIPOS, "situacoes": A.SITUACOES, "contagem": A.contagem(cfg)}
+    return {"ok": True, "itens": itens, "tipos": A.TIPOS, "situacoes": A.SITUACOES, "niveis": A.NIVEIS,
+            "contagem": A.contagem(cfg), "fichas": A.fichas(cfg, dados.get("cliente_id") or ""), "visao_geral": A.visao_geral()}
 
 
 def acomp_salvar(dados):
@@ -2007,6 +2008,32 @@ def acomp_remover(dados):
     return {"ok": ok} if ok else {"ok": False, "erro": "Registro não encontrado."}
 
 
+def acomp_ficha(dados):
+    try:
+        f = _acomp().salvar_ficha(comum.carregar_config(), dados.get("cliente_id") or "", dados.get("ficha") or {}, dados.get("_por") or "")
+    except ValueError as e:
+        return {"ok": False, "erro": str(e)}
+    return {"ok": True, "ficha": f}
+
+
+def acomp_visao(dados):
+    return {"ok": True, "visao_geral": _acomp().salvar_visao_geral(dados.get("texto"), dados.get("_por") or "")}
+
+
+def acomp_importar(dados):
+    if not dados.get("_admin"):
+        return {"ok": False, "erro": "Só um admin pode importar."}
+    try:
+        r = _acomp().importar(comum.carregar_config(), dados.get("conteudo") or "", dados.get("_por") or "", dados.get("_login") or "")
+    except ValueError as e:
+        return {"ok": False, "erro": str(e)}
+    comum.log("Acompanhamento importado por %s: %s" % (dados.get("_por"), r))
+    return dict(r, ok=True)
+
+
+ACOES["/api/acompanhamento/ficha"] = acomp_ficha
+ACOES["/api/acompanhamento/visao"] = acomp_visao
+ACOES["/api/acompanhamento/importar"] = acomp_importar
 ACOES["/api/acompanhamento/listar"] = acomp_listar
 ACOES["/api/acompanhamento/salvar"] = acomp_salvar
 ACOES["/api/acompanhamento/remover"] = acomp_remover
