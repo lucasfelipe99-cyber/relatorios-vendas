@@ -1272,11 +1272,56 @@ def _retratar_regra_nao_vendas():
         if afetados:
             _consolidar_depois(sorted(afetados), "regra nova: cancelada/devolução/não pago")
         os.makedirs(os.path.dirname(arq), exist_ok=True)
+        try:
+            with open(arq, "r", encoding="utf-8") as f:
+                regras = json.load(f)
+        except (OSError, ValueError):
+            regras = {}
+        regras.update(nao_vendas=REGRA_NAO_VENDAS, em=dt.datetime.now().isoformat(timespec="seconds"))
         with open(arq, "w", encoding="utf-8") as f:
-            json.dump({"nao_vendas": REGRA_NAO_VENDAS, "em": dt.datetime.now().isoformat(timespec="seconds")}, f)
+            json.dump(regras, f)
         comum.log("Tratados de hoje refeitos com a regra nova de cancelada/devolução/não pago (%d cliente(s))" % len(afetados))
     except Exception as e:
         comum.log("Refazer tratados com a regra nova falhou: %s" % e)
+
+
+REGRA_SHOPEE_VARIACAO = 1   # Shopee sem SKU: anúncio e SKU = "Nome do Produto Nome da variação" (12/11/2026)
+
+
+def _retratar_shopee_variacao():
+    """Uma vez: refaz o tratado mais recente da Shopee de cada conta (do mês atual) com a regra nova de pedido sem SKU,
+    e o pacote final dos clientes afetados."""
+    arq = os.path.join(comum.PASTA_SISTEMA, "dados", "regras_tratamento.json")
+    try:
+        with open(arq, "r", encoding="utf-8") as f:
+            regras = json.load(f)
+    except (OSError, ValueError):
+        regras = {}
+    if regras.get("shopee_variacao", 0) >= REGRA_SHOPEE_VARIACAO:
+        return
+    try:
+        cfg = comum.carregar_config()
+        hoje = dt.date.today()
+        afetados, n = set(), 0
+        for u in comum.filtrar_contas(cfg, None, so_ativas=False):
+            if "shopee" not in u.get("marketplaces", []):
+                continue
+            for d in range(0, 40):              # o dia mais recente com tratado da Shopee (a fonte do pacote do mês)
+                dia = hoje - dt.timedelta(days=d)
+                if os.path.isfile(_tratador().caminho_saida(cfg, u, "shopee", dia)):
+                    _tratador().tratar_cliente(cfg, u, dia, ["shopee"], "regra nova: Shopee sem SKU usa nome + variação")
+                    afetados.add(u["cliente_id"])
+                    n += 1
+                    break
+        if afetados:
+            _consolidar_depois(sorted(afetados), "regra nova: Shopee sem SKU usa nome + variação")
+        regras.update(shopee_variacao=REGRA_SHOPEE_VARIACAO, shopee_variacao_em=dt.datetime.now().isoformat(timespec="seconds"))
+        os.makedirs(os.path.dirname(arq), exist_ok=True)
+        with open(arq, "w", encoding="utf-8") as f:
+            json.dump(regras, f)
+        comum.log("Shopee sem SKU (nome + variação): %d tratado(s) refeito(s), %d cliente(s)" % (n, len(afetados)))
+    except Exception as e:
+        comum.log("Refazer tratados da Shopee com a regra nova falhou: %s" % e)
 
 
 def situacao_lancamentos(dados):
@@ -2050,6 +2095,7 @@ def _ao_iniciar():
     """Trabalhos de quando o sistema liga, um depois do outro (juntos, estouravam a memória do plano online)."""
     _reprocessar_antigos()
     _retratar_regra_nao_vendas()
+    _retratar_shopee_variacao()
     comum.devolver_memoria()
     _aquecer_painel(20)
     comum.devolver_memoria()

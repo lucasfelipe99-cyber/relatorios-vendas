@@ -149,6 +149,9 @@ def transformar_shopee(pedidos: pd.DataFrame, custos: pd.DataFrame, ids: pd.Data
 
     df["_sku_completo"] = df["Número de referência SKU"].map(_texto)
     df["Nome do Produto"] = df["Nome do Produto"].map(_texto)
+    # Sem SKU no pedido: anúncio e SKU viram "Nome do Produto Nome da variação" (cada variação separada)
+    variacao = df["Nome da variação"].map(_texto) if "Nome da variação" in df.columns else pd.Series("", index=df.index)
+    df["_sku_nome"] = (df["Nome do Produto"] + " " + variacao).str.replace(r"\s+", " ", regex=True).str.strip()
     if ids is None or ids.empty:
         df["ID do Produto"] = df["_sku_completo"]
     else:
@@ -159,6 +162,9 @@ def transformar_shopee(pedidos: pd.DataFrame, custos: pd.DataFrame, ids: pd.Data
         )
     df["Imposto"] = float(aliquota_imposto) * -(df["Faturamento"] + df["Desconto"])
     df["Número de referência SKU"] = df["_sku_completo"].str.split("-").str[0]
+    sem_sku = df["_sku_completo"].eq("")
+    df.loc[sem_sku, "ID do Produto"] = df.loc[sem_sku, "_sku_nome"]
+    df.loc[sem_sku, "Número de referência SKU"] = df.loc[sem_sku, "_sku_nome"]   # o nome pode ter "-": não corta
     custo = custos[["SKU", "Valor total"]].copy()
     custo["SKU"] = custo["SKU"].map(_texto)
     df = df.merge(custo, left_on="Número de referência SKU", right_on="SKU",
