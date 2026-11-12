@@ -325,7 +325,8 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
     import pandas as pd
     import lancamentos
     novas, totais, resumo = [], {}, {"ads": {}, "afiliados": {}, "afiliados_sem_pedido": 0, "afiliados_sem_pedido_por": {},
-                                     "afiliados_pedidos_achados": {}, "ads_sem_depara": {}, "visitas": {}}
+                                     "afiliados_pedidos_achados": {}, "ads_sem_depara": {}, "visitas": {}, "ids_shopee": {}}
+    pesos_sh = {}          # Shopee: {loja: {id do anúncio: [gasto ADS, visitas]}} para escolher o anúncio do SKU que está em mais de um
     fat = (df["Categoria"] == FAT[0]) & (df["Sub Categoria"] == FAT[1]) & (df["Valor completo"] > 0)
     for u in comum.contas_do_cliente(cfg, cliente):
         d = lancamentos.dono(u)
@@ -418,6 +419,8 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                     if sku_arq and sku_arq in depara and sku_arq not in skus_vendas:
                         an, sku_arq = sku_arq, ""
                     eh_id = an.isdigit() if mk == "shopee" else bool(an)
+                    if mk == "shopee" and eh_id:
+                        pesos_sh.setdefault(loja, {}).setdefault(an, [0.0, 0.0])[0] += abs(i.get("Gasto") or 0)
                     if eh_id and (depara.get(an) or {}).get("manual"):
                         sku_arq = ""                    # preenchido à mão no app vale por cima do SKU do relatório
                     if eh_id:
@@ -503,6 +506,8 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                 if not i.get("Visitas"):
                     continue                        # só as visitas: as vendas vêm do relatório de vendas
                 an = str(i.get("Id anúncio") or "")
+                if mk == "shopee" and an.isdigit():
+                    pesos_sh.setdefault(loja, {}).setdefault(an, [0.0, 0.0])[1] += i.get("Visitas") or 0
                 if mk == "mercadolivre" and an.isdigit():
                     an = "MLB" + an                    # igual ao "# de anúncio" das vendas
                 sku = str(i.get("SKU") or "").strip()
@@ -564,7 +569,76 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                                                           "sem_sku_nomes": sem_nomes}
     if novas:
         df = pd.concat([df, pd.DataFrame(novas)], ignore_index=True)
+    _ids_anuncio_shopee(cfg, cliente, df, pesos_sh, resumo)
     return df, {"totais": totais, "resumo": resumo}
+
+
+def _ids_shopee_do_depara(depara):
+    """De-para da Shopee ao contrário: {SKU como nas vendas (cortado no "-"): {ids de anúncio}}."""
+    import lancamentos
+    r = {}
+    for an, v in (depara or {}).items():
+        an = str(an).strip()
+        if not an.isdigit():
+            continue
+        for s in lancamentos.skus_lista(_skus_como_vendas_shopee((v or {}).get("sku") or "")):
+            s = str(s).strip()
+            if s and s != "0":
+                r.setdefault(s, set()).add(an)
+    return r
+
+
+def _ids_anuncio_shopee(cfg, cliente, df, pesos_sh, resumo):
+    """Shopee: o "Id anúncio" das linhas que estão com o próprio SKU (vendas, ADS, afiliados e visitas) passa a ser o
+    ID do anúncio do de-para da conta. Só muda essa coluna — SKU e valores ficam iguais.
+    SKU em um anúncio só: esse ID. Em mais de um: o que teve mais gasto de ADS no mês na conta, depois mais visitas;
+    sem nenhum dos dois, fica o SKU (aparece na conferência). SKU fora do de-para (ou SKU 0) fica como está."""
+    import lancamentos
+    if not len(df):
+        return
+    nome_sh = _nome_mk(cfg, "shopee")
+    do_mk = df["Marketplace"] == nome_sh
+    if not do_mk.any():
+        return
+    for u in comum.contas_do_cliente(cfg, cliente):
+        d = lancamentos.dono(u)
+        loja = d["loja"]
+        depara = lancamentos.carregar_depara(cfg, d, "shopee")
+        if not depara:
+            continue
+        por_sku = _ids_shopee_do_depara(depara)
+        norm = {}
+        for s in por_sku:
+            norm.setdefault(_sku_norm(s), s)
+        sku_txt = df["SKU"].astype(str)
+        alvo = do_mk & (df["Marketplace venda"] == loja) & (sku_txt != "") & (sku_txt != "0") \
+            & (df["Id anúncio"].astype(str) == sku_txt)
+        if not alvo.any():
+            continue
+        pesos = pesos_sh.get(loja, {})
+        escolha, sem, ambiguos, decididos = {}, [], {}, {}
+        for s in sorted(set(sku_txt[alvo])):
+            ids = por_sku.get(s) or por_sku.get(norm.get(_sku_norm(s), ""), set())
+            if not ids:
+                sem.append(s)
+                continue
+            if len(ids) == 1:
+                escolha[s] = next(iter(ids))
+                continue
+            ordem = sorted(ids, key=lambda a: (-(pesos.get(a) or [0, 0])[0], -(pesos.get(a) or [0, 0])[1], a))
+            p0 = pesos.get(ordem[0]) or [0, 0]
+            p1 = pesos.get(ordem[1]) or [0, 0]
+            if (p0[0] or p0[1]) and (p0[0], p0[1]) != (p1[0], p1[1]):
+                escolha[s] = ordem[0]
+                decididos[s] = ordem[0]
+            else:
+                ambiguos[s] = sorted(ids)
+        if escolha:
+            df.loc[alvo, "Id anúncio"] = sku_txt[alvo].map(lambda x: escolha.get(x, x))
+        resumo["ids_shopee"]["%s|shopee" % u["id"]] = {
+            "com_id": len(escolha), "sem_anuncio": len(sem), "sem_anuncio_ex": sem[:8],
+            "varios_escolhidos": len(decididos), "ambiguos": len(ambiguos),
+            "ambiguos_ex": {k: v for k, v in list(ambiguos.items())[:8]}}
 
 
 # ---------------------------------------------------------------- geração

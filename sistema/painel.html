@@ -966,6 +966,9 @@ async function rLanc(){
       if(dp){const D=(todo.depara||{})[mk]||(mk==="shopee"?todo.depara_shopee:null),sd=(LR.ads_sem_depara||{})[ck],ids=sd?Object.entries(sd.ids||{}):[];
         txt+=D?`<div class="small mut">De-para (mass_update): ${D.anuncios} anúncio(s) · atualizado ${dataHora(D.atualizado)}</div>`
               :`<div class="small" style="color:var(--err)">Sem de-para: suba a planilha mass_update da ${esc(nome)} para ligar o anúncio ao SKU</div>`;
+        const IS=mk==="shopee"?(LR.ids_shopee||{})[ck]:null;
+        if(IS)txt+=`<div class="small mut">Id anúncio no pacote: ${IS.com_id} SKU(s) com o ID do anúncio${IS.varios_escolhidos?` (${IS.varios_escolhidos} em mais de um anúncio: ficou o de mais ADS/visitas)`:""}${IS.sem_anuncio?` · ${IS.sem_anuncio} sem anúncio no de-para (ficou o SKU): ${IS.sem_anuncio_ex.slice(0,4).map(esc).join(", ")}${IS.sem_anuncio>4?" …":""}`:""}</div>`
+          +(IS.ambiguos?`<div class="small" style="color:var(--war)">${IS.ambiguos} SKU(s) em mais de um anúncio, sem ADS nem visitas para decidir (ficou o SKU): ${Object.entries(IS.ambiguos_ex||{}).slice(0,3).map(([k,v])=>`${esc(k)} → ${v.map(esc).join(" / ")}`).join("; ")}${IS.ambiguos>3?" …":""}</div>`:"");
         if(ids.length)txt+=`<div class="small" style="color:var(--war)">${ids.length} anúncio(s) do ADS sem SKU no de-para (entraram com SKU 0): ${ids.slice(0,6).map(([k,v])=>`${esc(k)} (${fmtCel(v)})`).join(", ")}${ids.length>6?" …":""} — suba a mass_update atualizada ou <a href="#" onclick='deparaApp(${JSON.stringify(u.id)},"${mk}",${JSON.stringify(mes)});return false'><b>preencha no sistema</b></a></div>`;
         txt+=`<div style="margin-top:4px"><button class="bs" onclick='deparaApp(${JSON.stringify(u.id)},"${mk}",${JSON.stringify(mes)})'>Preencher de-para no sistema${ids.length?` (${ids.length})`:""}</button></div>`}
       if(tipo==="ads"&&mk==="tiktokshop"&&x){const sd=(LR.ads_sem_depara||{})[ck],ids=sd?Object.entries(sd.ids||{}):[];
