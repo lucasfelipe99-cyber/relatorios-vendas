@@ -1296,7 +1296,7 @@ def _gravar_regras(regras):
 
 def retratar_mes(motivo, por="sistema"):
     """Refaz, com o código atual, o tratado mais recente do mês de cada conta e marketplace (o que alimenta o pacote),
-    relê os ADS/afiliados do mês enviados (arquivos originais) e refaz o pacote final do mês de todos os clientes.
+    relê o de-para e os ADS/afiliados do mês enviados (arquivos originais) e refaz o pacote final do mês de todos os clientes.
     Só um por vez."""
     if not _TRAVA_RETRATAR.acquire(blocking=False):
         return False
@@ -1343,6 +1343,7 @@ def retratar_mes(motivo, por="sistema"):
         _RETRATAR["fase"] = "ads"
         for d in donos:
             try:
+                _lanc().reprocessar_depara(cfg, d)          # de-para (mass_update) com a leitura atual
                 r = _lanc().reprocessar(cfg, d, so_mes=mes)
                 if r.get("erros"):
                     _RETRATAR["erros"] += len(r["erros"])

@@ -960,6 +960,53 @@ def guardar_depara(cfg, dono_, nome_original, conteudo, mk="shopee"):
     return info
 
 
+def reprocessar_depara(cfg, dono_):
+    """Relê as planilhas de de-para enviadas (em _originais), na ordem em que foram enviadas, e refaz o de-para de
+    cada marketplace com a leitura atual. O preenchido no app (de-para manual) fica como está.
+    Devolve {mk: anúncios}."""
+    import json
+    base = pasta(cfg, dono_)
+    orig = os.path.join(base, "_originais")
+    if not os.path.isdir(orig):
+        return {}
+    padrao = re.compile(r"^(\d{8}-\d{6})_depara_([a-z0-9-]+?)_(.+)$")
+    por_mk = {}
+    for f in sorted(os.listdir(orig)):
+        m = padrao.match(f)
+        if not m or f.endswith(".recusado") or m.group(2) not in DEPARA:
+            continue
+        por_mk.setdefault(m.group(2), []).append((f, m.group(3)))
+    feito = {}
+    for mk, arqs in por_mk.items():
+        atual, origem = {}, ""
+        for f, nome in arqs:
+            try:
+                novo = ler_depara(mk, os.path.join(orig, f))
+            except Exception as e:
+                comum.log("[%s] de-para %s: não reli %s (%s)" % (dono_["nome"], mk, nome, e))
+                continue
+            for k, v in novo.items():          # a planilha só com o SKU pai não desfaz as variações já lidas
+                if atual.get(k, {}).get("variacoes") and not v.get("variacoes"):
+                    v.update(sku=atual[k]["sku"], variacoes=True)
+            atual.update(novo)
+            origem = nome
+        if not atual:
+            continue
+        arq = _depara_arq(cfg, dono_, mk)
+        if os.path.isfile(arq):
+            ant = os.path.join(base, "_anteriores", "depara_%s_%s_antes-reprocessar.json" % (mk, dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+            os.makedirs(os.path.dirname(ant), exist_ok=True)
+            shutil.copy2(arq, ant)
+        with open(arq + ".novo", "w", encoding="utf-8") as fh:
+            json.dump({"atualizado": dt.datetime.now().isoformat(timespec="seconds"), "origem": origem, "anuncios": atual,
+                       "reprocessado": True}, fh, ensure_ascii=False)
+        os.replace(arq + ".novo", arq)
+        feito[mk] = len(atual)
+        comum.log("[%s] de-para %s relido: %d anúncio(s) (%d com variações)"
+                  % (dono_["nome"], mk, len(atual), sum(1 for v in atual.values() if v.get("variacoes"))))
+    return feito
+
+
 def carregar_depara(cfg, dono_, mk="shopee", com_manual=True):
     """{id_anuncio: {"sku", "nome"}} da conta ({} se não houver). O que foi preenchido no app vale por cima."""
     import json
