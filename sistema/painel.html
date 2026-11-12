@@ -1567,7 +1567,7 @@ window.subirLanc=(uid,tipo,mk,camp,detalhe)=>{const c=E.contas.find(x=>x.id===ui
   dlg.showModal()};
 
 const DEPARA_MK=["shopee","magalu"];   // igual a lancamentos.DEPARA
-const DEPARA_TXT={shopee:"<b>mass_update</b> (informações básicas) exportada da Shopee, com <b>ID do Produto</b> e <b>SKU de referência</b>",
+const DEPARA_TXT={shopee:"<b>mass_update</b> exportada da Shopee: a de <b>informações básicas</b> (ID do Produto e SKU de referência) e, para anúncios com variações, a de <b>informações de vendas</b> (uma linha por variação, com o SKU de cada uma; o gasto do anúncio é dividido entre os SKUs que venderam no dia, pelas unidades)",
   magalu:"<b>mass_update</b> (planilha de produtos) exportada da Magalu, com <b>Código site Magalu</b> e <b>SKU</b>"};
 window.subirDepara=(uid,mk)=>{mk=mk||"shopee";const c=E.contas.find(x=>x.id===uid),nmk=E.config.marketplaces[mk]?.nome||mk;
   let dlg=document.getElementById("dlg-lanc");if(!dlg){dlg=document.createElement("dialog");dlg.id="dlg-lanc";dlg.style.cssText="border:1px solid var(--li);border-radius:12px;padding:0;max-width:560px;width:calc(100% - 32px);background:var(--card);color:var(--tx)";document.body.appendChild(dlg)}
@@ -1579,7 +1579,7 @@ window.subirDepara=(uid,mk)=>{mk=mk||"shopee";const c=E.contas.find(x=>x.id===ui
   dlg.querySelector("#dp-enviar").onclick=async e=>{const f=dlg.querySelector("#dp-arq").files[0];if(!f)return toast("Escolha o arquivo");
     const K="ads|"+uid+"|"+mk,box=document.createElement("div");dlg.close();procIni(K,`De-para da ${nmk}`);
     const r=await post("/api/lancamento/depara",{conta_id:uid,mk,nome:f.name,conteudo:await lerB64(f)});
-    box.innerHTML=r.ok?`<div class="okmsg">De-para guardado: ${r.info.no_arquivo} anúncio(s) no arquivo (${r.info.novos} novo(s)${r.info.mudaram?`, ${r.info.mudaram} com SKU trocado`:""}), ${r.info.total} no total.${r.info.sem_sku?`<div class="small" style="color:var(--war)">${r.info.sem_sku} anúncio(s) sem SKU na planilha: o ADS deles entra com SKU 0.</div>`:""}
+    box.innerHTML=r.ok?`<div class="okmsg">De-para guardado: ${r.info.no_arquivo} anúncio(s) no arquivo (${r.info.novos} novo(s)${r.info.mudaram?`, ${r.info.mudaram} com SKU trocado`:""}), ${r.info.total} no total.${r.info.com_variacoes?` ${r.info.com_variacoes} anúncio(s) com variações (vários SKUs no mesmo anúncio).`:""}${r.info.sem_sku?`<div class="small" style="color:var(--war)">${r.info.sem_sku} anúncio(s) sem SKU na planilha: o ADS deles entra com SKU 0.</div>`:""}
       ${(r.consolidado||[]).map(x=>`<div class="small">Consolidado ${esc(x.mes)}: ${x.ok?(x.conferido?"refeito e conferido":"refeito, mas com diferença — veja o Pacote final"):"não gerado — "+esc(x.erro||"")}</div>`).join("")}</div>`:`<div class="erro">${esc(r.erro)}</div>`;
     procFim(K,!!r.ok,box.innerHTML,`De-para da ${nmk}: ${r.ok?"guardado":"erro"}`)};
   dlg.showModal()};

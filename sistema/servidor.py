@@ -1290,6 +1290,33 @@ REGRAS_SEM_SKU = (("shopee_variacao", 1, "shopee", "Shopee sem SKU usa nome + va
                   ("tiktok_variacao", 1, "tiktokshop", "TikTok sem Seller SKU usa nome + variação"))  # 12/11/2026
 
 
+REGRA_ADS_RATEIO = 1   # ADS de anúncio com variações: rateio pelas unidades vendidas no dia (12/11/2026)
+
+
+def _refazer_pacotes_rateio():
+    """Uma vez: refaz o pacote final do mês de todos os clientes com o rateio novo do ADS."""
+    arq = os.path.join(comum.PASTA_SISTEMA, "dados", "regras_tratamento.json")
+    try:
+        with open(arq, "r", encoding="utf-8") as f:
+            regras = json.load(f)
+    except (OSError, ValueError):
+        regras = {}
+    if regras.get("ads_rateio_dia", 0) >= REGRA_ADS_RATEIO:
+        return
+    try:
+        cfg = comum.carregar_config()
+        ids = [c["id"] for c in cfg.get("clientes", []) if c.get("ativo") is not False]
+        if ids:
+            _consolidar_depois(ids, "regra nova: ADS de anúncio com variações rateado pelas unidades do dia")
+        regras.update(ads_rateio_dia=REGRA_ADS_RATEIO, ads_rateio_dia_em=dt.datetime.now().isoformat(timespec="seconds"))
+        os.makedirs(os.path.dirname(arq), exist_ok=True)
+        with open(arq, "w", encoding="utf-8") as f:
+            json.dump(regras, f)
+        comum.log("ADS com variações (rateio pelo dia): pacote do mês refeito para %d cliente(s)" % len(ids))
+    except Exception as e:
+        comum.log("Refazer pacotes com o rateio novo do ADS falhou: %s" % e)
+
+
 def _retratar_sem_sku():
     """Uma vez por regra: refaz o tratado mais recente do marketplace em cada conta (a fonte do pacote do mês)
     e o pacote final dos clientes afetados."""
@@ -2099,6 +2126,7 @@ def _ao_iniciar():
     _reprocessar_antigos()
     _retratar_regra_nao_vendas()
     _retratar_sem_sku()
+    _refazer_pacotes_rateio()
     comum.devolver_memoria()
     _aquecer_painel(20)
     comum.devolver_memoria()

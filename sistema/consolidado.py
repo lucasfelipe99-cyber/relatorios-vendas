@@ -232,21 +232,41 @@ def _linhas_do_tratado(df, mk):
 
 
 # ---------------------------------------------------------------- anúncio com variações (mais de um SKU)
-def _repartir(df, nome, loja, sku, cache):
-    """SKU do de-para pode ser "290, 289" (anúncio com variações). Devolve [(sku, peso)]: o gasto/visita do anúncio é
-    repartido pelo faturamento do mês de cada SKU no marketplace (na conta; senão em todas); sem venda, pelas unidades;
+def _repartir(df, nome, loja, sku, cache, dia=None):
+    """SKU do de-para pode ser "290, 289" (anúncio com variações). Devolve [(sku, peso)].
+
+    ADS (com o dia): o gasto do anúncio no dia vai para os SKUs dele que venderam naquele dia, na mesma conta,
+    proporcional às unidades vendidas. Dia sem venda de nenhum SKU do anúncio: pelas unidades do mês (na conta;
+    senão em todas), depois pelo faturamento do mês; sem nada, em partes iguais.
+    Visitas (sem o dia): pelo faturamento do mês de cada SKU (na conta; senão em todas); sem venda, pelas unidades;
     sem nada, em partes iguais."""
     import lancamentos
     skus = lancamentos.skus_lista(sku)
     if len(skus) <= 1:
         return [(skus[0] if skus else sku, 1.0)]
-    k = (nome, loja, tuple(skus))
+    if dia is not None:
+        kd = ("dia", nome, loja, tuple(skus))
+        if kd not in cache:
+            b = df[(df["Marketplace"] == nome) & (df["Marketplace venda"] == loja) & df["SKU"].astype(str).isin(skus)
+                   & (df["Categoria"] == QTD[0]) & (df["Sub Categoria"] == QTD[1])]
+            por_dia = {}
+            if len(b):
+                g = b.groupby([pd_datas(b["Data"]), b["SKU"].astype(str)])["Valor completo"].sum()
+                for (d, x), v in g.items():
+                    if v > 0:
+                        por_dia.setdefault(d, {})[x] = float(v)
+            cache[kd] = por_dia
+        vend = cache[kd].get(pd_datas_um(dia))
+        if vend:
+            tot = sum(vend.values())
+            return [(x, vend.get(x, 0.0) / tot) for x in skus]
+    k = (nome, loja, tuple(skus), dia is not None)
     if k not in cache:
         pesos = None
         base = df[(df["Marketplace"] == nome) & df["SKU"].astype(str).isin(skus)]
         for filtro in (base["Marketplace venda"] == loja, None):
             b = base[filtro] if filtro is not None else base
-            for cat in (FAT, QTD):
+            for cat in ((QTD, FAT) if dia is not None else (FAT, QTD)):
                 v = b[(b["Categoria"] == cat[0]) & (b["Sub Categoria"] == cat[1])].groupby(b["SKU"].astype(str))["Valor completo"].sum()
                 tot = float(sum(max(0.0, float(v.get(x, 0.0))) for x in skus))
                 if tot > 0:
@@ -256,6 +276,31 @@ def _repartir(df, nome, loja, sku, cache):
                 break
         cache[k] = pesos or [(x, 1.0 / len(skus)) for x in skus]
     return cache[k]
+
+
+def _skus_como_vendas_shopee(sku):
+    """Os SKUs das variações no de-para, do jeito que a venda da Shopee guarda o SKU (cortado no primeiro "-")."""
+    import lancamentos
+    vistos = []
+    for x in lancamentos.skus_lista(sku):
+        x = x.split("-")[0].strip() or x
+        if x not in vistos:
+            vistos.append(x)
+    return ", ".join(vistos)
+
+
+def pd_datas(serie):
+    """Datas (sem hora) de uma coluna, como date."""
+    import pandas as pd
+    return pd.to_datetime(serie, errors="coerce").dt.date
+
+
+def pd_datas_um(v):
+    import pandas as pd
+    try:
+        return pd.Timestamp(v).date()
+    except (TypeError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------------- ADS e afiliados (subidos pelo app)
@@ -377,6 +422,8 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                         sku_arq = ""                    # preenchido à mão no app vale por cima do SKU do relatório
                     if eh_id:
                         sku = (depara.get(an) or {}).get("sku") or (an if an in skus_vendas else "")
+                        if mk == "shopee" and "," in sku:
+                            sku = _skus_como_vendas_shopee(sku)
                         if not sku and not sku_arq:
                             sem_depara[an] = sem_depara.get(an, 0.0) + i["Gasto"]
                             nomes_sem.setdefault(an, str(i.get("Campanha") or "")[:150])
@@ -388,7 +435,8 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                         sem_depara[an] = sem_depara.get(an, 0.0) + i["Gasto"]
                         nomes_sem.setdefault(an, str(i.get("Campanha") or "")[:150])
                     sku = sku_arq or sku or "0"
-                    for sku_p, w in _repartir(df, nome, loja, sku, rep_cache):
+                    rp = [(x, w) for x, w in _repartir(df, nome, loja, sku, rep_cache, dia=i["Data"]) if w > 0]
+                    for sku_p, w in rp:
                         an_p = sku_p if (sku_p != "0" or not eh_id) else an
                         base = {"Pedido": "", "Marketplace venda": loja, "SKU": sku_p, "Id anúncio": an_p, "Data": pd.Timestamp(i["Data"]),
                                 "Marketplace": nome, "Type": "Organico"}
@@ -413,9 +461,10 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                         sem_depara[an] = sem_depara.get(an, 0.0) + i["Gasto"]
                         nomes_sem.setdefault(an, str(i.get("Campanha") or "")[:150])
                 sku = sku or "0"
-                rp = _repartir(df, nome, loja, sku, rep_cache)
+                varios = len(lancamentos.skus_lista(sku)) > 1
+                rp = [(x, w) for x, w in _repartir(df, nome, loja, sku, rep_cache, dia=i["Data"]) if w > 0]
                 for sku_p, w in rp:
-                    base = {"Pedido": "", "Marketplace venda": loja, "SKU": sku_p, "Id anúncio": an if len(rp) == 1 else sku_p,
+                    base = {"Pedido": "", "Marketplace venda": loja, "SKU": sku_p, "Id anúncio": sku_p if varios else an,
                             "Data": pd.Timestamp(i["Data"]), "Marketplace": nome, "Type": "Organico"}
                     for (cat, sc), v in ((PUB, -i["Gasto"]), (CLQ, i["Cliques"]), (ADF, i["Receita ADS"])):
                         if v:

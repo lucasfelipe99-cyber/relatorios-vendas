@@ -862,10 +862,16 @@ def _depara_arq(cfg, dono_, mk="shopee"):
 
 
 def ler_depara(mk, caminho):
-    """{id do anúncio: {"sku", "nome"}} lido da mass_update do marketplace."""
+    """{id do anúncio: {"sku", "nome"[, "variacoes"]}} lido da mass_update do marketplace.
+
+    Shopee: a mass_update de informações básicas traz o SKU de referência (pai) de cada anúncio; a de informações
+    de vendas traz uma linha por variação, com o SKU de cada uma. Todas as linhas do mesmo ID do anúncio são juntadas:
+    o anúncio com variações aponta para todos os SKUs dele ("290, 289, 291") e fica marcado com "variacoes"."""
+    var_col = lambda k: False
     if mk == "shopee":
         ok_id = lambda k: k == "iddoproduto"
-        ok_sku = lambda k: k.startswith("skudereferencia") or k == "sku"
+        ok_sku = lambda k: k.startswith("skudereferencia") or k == "sku" or k.startswith("skupai") or k == "parentsku"
+        var_col = lambda k: k in ("sku", "skudavariacao", "skudavariante", "variationsku", "skuvariacao")
         ok_nome = lambda k: k.startswith("nomedoproduto")
         id_valido = lambda v: v.isdigit()
     elif mk == "magalu":
@@ -880,17 +886,31 @@ def ler_depara(mk, caminho):
         for n, cab in enumerate(linhas[:15]):
             ks = [_chave(c) for c in cab]
             ji = next((j for j, k in enumerate(ks) if ok_id(k)), None)
-            js = next((j for j, k in enumerate(ks) if ok_sku(k)), None)
-            if ji is None or js is None:
+            jv = next((j for j, k in enumerate(ks) if var_col(k)), None)              # SKU da variação (se houver)
+            jp = next((j for j, k in enumerate(ks) if ok_sku(k) and j != jv), None)   # SKU de referência / pai
+            if ji is None or (jv is None and jp is None):
                 continue
             jn = next((j for j, k in enumerate(ks) if ok_nome(k)), None)
+            tem_var = jv is not None and (jp is not None or any(k.startswith("iddavaria") or k.startswith("nomedavaria")
+                                                               or k.startswith("variationid") for k in ks))
+            cel = lambda r, j: _texto(r[j]) if j is not None and j < len(r) else ""
             saida = {}
             for r in linhas[n + 1:]:
-                pid = _texto(r[ji] if ji < len(r) else "")
+                pid = cel(r, ji)
                 if not id_valido(pid):
                     continue
-                saida[pid] = {"sku": _texto(r[js] if js < len(r) else ""),
-                              "nome": _texto(r[jn])[:120] if jn is not None and jn < len(r) else ""}
+                d = saida.setdefault(pid, {"sku": [], "nome": cel(r, jn)[:120]})
+                if not d["nome"]:
+                    d["nome"] = cel(r, jn)[:120]
+                sku = cel(r, jv) if tem_var else ""
+                sku = sku or cel(r, jp) or (cel(r, jv) if not tem_var else "")
+                for x in skus_lista(sku):
+                    if x not in d["sku"]:
+                        d["sku"].append(x)
+            for d in saida.values():
+                if tem_var and len(d["sku"]) > 1:
+                    d["variacoes"] = True
+                d["sku"] = ", ".join(d["sku"])
             if len(saida) > len(melhor) or (len(saida) == len(melhor) and saida and jn is not None):
                 melhor = saida
             break
@@ -919,7 +939,11 @@ def guardar_depara(cfg, dono_, nome_original, conteudo, mk="shopee"):
     except ValueError:
         os.replace(original, original + ".recusado")
         raise
-    atual = carregar_depara(cfg, dono_, mk)
+    atual = carregar_depara(cfg, dono_, mk, com_manual=False)
+    # a planilha de informações básicas (só o SKU pai) não desfaz as variações já lidas da planilha de vendas
+    for k, v in novo.items():
+        if atual.get(k, {}).get("variacoes") and not v.get("variacoes"):
+            v.update(sku=atual[k]["sku"], variacoes=True)
     novos = sum(1 for k in novo if k not in atual)
     mudaram = sum(1 for k, v in novo.items() if k in atual and atual[k].get("sku") != v["sku"])
     atual.update(novo)
@@ -929,7 +953,8 @@ def guardar_depara(cfg, dono_, nome_original, conteudo, mk="shopee"):
                    "anuncios": atual}, f, ensure_ascii=False)
     os.replace(arq + ".novo", arq)
     info = {"no_arquivo": len(novo), "total": len(atual), "novos": novos, "mudaram": mudaram,
-            "sem_sku": sum(1 for v in novo.values() if not v["sku"])}
+            "sem_sku": sum(1 for v in novo.values() if not v["sku"]),
+            "com_variacoes": sum(1 for v in novo.values() if v.get("variacoes"))}
     comum.log("[%s] de-para %s: %d anúncios no arquivo (%d novos, %d com SKU trocado), %d no total"
               % (dono_["nome"], mk, info["no_arquivo"], novos, mudaram, info["total"]))
     return info
