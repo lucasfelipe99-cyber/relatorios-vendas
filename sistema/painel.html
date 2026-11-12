@@ -970,7 +970,7 @@ async function rLanc(){
         if(IS)txt+=`<div class="small mut">Id anúncio no pacote: ${IS.com_id} SKU(s) com o ID do anúncio${IS.varios_escolhidos?` (${IS.varios_escolhidos} em mais de um anúncio: ficou o de mais ADS/visitas)`:""}${IS.sem_anuncio?` · ${IS.sem_anuncio} sem anúncio no de-para (ficou o SKU): ${IS.sem_anuncio_ex.slice(0,4).map(esc).join(", ")}${IS.sem_anuncio>4?" …":""}`:""}</div>`
           +(IS.ambiguos?`<div class="small" style="color:var(--war)">${IS.ambiguos} SKU(s) em mais de um anúncio, sem ADS nem visitas para decidir (ficou o SKU): ${Object.entries(IS.ambiguos_ex||{}).slice(0,3).map(([k,v])=>`${esc(k)} → ${v.map(esc).join(" / ")}`).join("; ")}${IS.ambiguos>3?" …":""}</div>`:"");
         if(ids.length)txt+=`<div class="small" style="color:var(--war)">${ids.length} anúncio(s) do ADS sem SKU no de-para (entraram com SKU 0): ${ids.slice(0,6).map(([k,v])=>`${esc(k)} (${fmtCel(v)})`).join(", ")}${ids.length>6?" …":""} — suba a mass_update atualizada ou <a href="#" onclick='deparaApp(${JSON.stringify(u.id)},"${mk}",${JSON.stringify(mes)});return false'><b>preencha no sistema</b></a></div>`;
-        txt+=`<div style="margin-top:4px"><button class="bs" onclick='deparaApp(${JSON.stringify(u.id)},"${mk}",${JSON.stringify(mes)})'>Preencher de-para no sistema${ids.length?` (${ids.length})`:""}</button></div>`}
+        txt+=`<div style="margin-top:4px"><button class="bs" onclick='deparaApp(${JSON.stringify(u.id)},"${mk}",${JSON.stringify(mes)})'>Preencher de-para no sistema${ids.length?` (${ids.length})`:""}</button> <button class="bs" onclick='deparaVer(${JSON.stringify(u.id)},"${mk}",${JSON.stringify(mes)})'>Ver anúncios</button></div>`}
       if(tipo==="ads"&&mk==="tiktokshop"&&x){const sd=(LR.ads_sem_depara||{})[ck],ids=sd?Object.entries(sd.ids||{}):[];
         if(ids.length)txt+=`<div class="small" style="color:var(--war)">${ids.length} produto(s) do ADS sem venda com o mesmo nome no mês (entraram com SKU 0): ${ids.slice(0,4).map(([k,v])=>`${esc((sd.nomes||{})[k]||k)} (${fmtCel(v)})`).join(", ")}${ids.length>4?" …":""}</div>`;
         txt+=`<div style="margin-top:4px"><button class="bs" onclick='deparaApp(${JSON.stringify(u.id)},"${mk}",${JSON.stringify(mes)})'>Preencher de-para no sistema${ids.length?` (${ids.length})`:""}</button></div>`}
@@ -1444,6 +1444,33 @@ window.deparaApp=async(uid,mk,mes,tipo)=>{const r=await post("/api/lancamento/de
     if(!r2.ok)return toast(r2.erro);toast(`De-para salvo: ${r2.ligados} ligado(s)${r2.tirados?`, ${r2.tirados} tirado(s)`:""}. Pacote refeito.`);
     Object.keys(LC_CACHE).forEach(k=>delete LC_CACHE[k]);d.close();carregar()};
   d.showModal()};
+window.deparaVer=async(uid,mk,mes)=>{const r=await post("/api/lancamento/depara/ver",{conta_id:uid,mk,mes});if(!r.ok)return toast(r.erro);
+  const u=E.contas.find(x=>x.id===uid),nome=E.config.marketplaces[mk]?.nome||mk,its=r.itens||[];
+  let d=document.getElementById("dlg-dpv");if(!d){d=document.createElement("dialog");d.id="dlg-dpv";d.style.cssText="border:1px solid var(--li);border-radius:12px;padding:0;max-width:1180px;width:calc(100% - 32px);background:var(--card);color:var(--tx)";document.body.appendChild(d)}
+  const inpS='font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--li);border-radius:7px;padding:5px 8px';
+  const lista=s=>(s||"").split(/[,;]/).map(x=>x.trim()).filter(Boolean);
+  const nPac=its.filter(i=>Object.keys(i.pacote).length).length,nMan=its.filter(i=>i.manual).length,nVar=its.filter(i=>i.variacoes).length;
+  d.innerHTML=`<div style="padding:18px"><h2 style="margin:0 0 6px;font-size:16px">Anúncios do de-para — ${esc(u.nome)} · ${esc(nome)}</h2>
+    <p class="small mut" style="margin-top:0">${its.length} anúncio(s) · ${nVar} com variações · ${nMan} preenchido(s) à mão no sistema (vale por cima da planilha) · ${nPac} com movimento no pacote de ${esc(r.mes.slice(5)+"/"+r.mes.slice(0,4))}${r.consolidado_em?" (gerado "+dataHora(r.consolidado_em)+")":""}.${r.info&&r.info.atualizado?` Planilha: ${esc(r.info.origem||"")} · ${dataHora(r.info.atualizado)}.`:""}
+      <b>No pacote</b>: SKUs que entraram com o ID do anúncio no mês; SKU do de-para em cinza não teve venda nem ADS com esse ID.</p>
+    ${r.erro_pacote?`<div class="small" style="color:var(--war)">Não consegui ler o pacote: ${esc(r.erro_pacote)}</div>`:""}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:6px 0 8px"><input id="dpv-q" placeholder="Buscar anúncio, nome ou SKU" autocomplete="off" style="${inpS};width:280px">
+      <label class="small"><input type="checkbox" id="dpv-man"> só preenchidos à mão</label><label class="small"><input type="checkbox" id="dpv-var"> só com variações</label><label class="small"><input type="checkbox" id="dpv-pac"> só com movimento no mês</label><span class="small mut" id="dpv-n"></span></div>
+    <div style="max-height:60vh;overflow:auto"><table class="small" style="width:100%;border-collapse:collapse"><thead><tr style="position:sticky;top:0;background:var(--card)"><th style="text-align:left;padding:6px">Anúncio</th><th style="text-align:left;padding:6px">Nome</th><th style="text-align:left;padding:6px">SKU da planilha</th><th style="text-align:left;padding:6px">Preenchido à mão</th><th style="text-align:left;padding:6px">No pacote (qtd · faturamento)</th><th style="text-align:right;padding:6px">Publicidade</th></tr></thead><tbody id="dpv-b"></tbody></table></div>
+    <div style="text-align:right;margin-top:12px"><button class="bs" id="dpv-dp">Preencher de-para no sistema</button> <button class="bs" id="dpv-f">Fechar</button></div></div>`;
+  const desenha=()=>{const q=d.querySelector("#dpv-q").value.trim().toLowerCase(),fm=d.querySelector("#dpv-man").checked,fv=d.querySelector("#dpv-var").checked,fp=d.querySelector("#dpv-pac").checked;
+    const fil=its.filter(i=>(!fm||i.manual)&&(!fv||i.variacoes)&&(!fp||Object.keys(i.pacote).length)&&(!q||[i.id,i.nome,i.planilha,i.manual,...Object.keys(i.pacote)].join(" ").toLowerCase().includes(q)));
+    d.querySelector("#dpv-n").textContent=fil.length+" de "+its.length;
+    d.querySelector("#dpv-b").innerHTML=fil.slice(0,500).map(i=>{const val=lista(i.valendo),pk=i.pacote,pub=Object.values(pk).reduce((a,x)=>a+(x.pub||0),0);
+      const skus=[...new Set([...val,...Object.keys(pk)])];
+      const pac=skus.map(s=>{const x=pk[s];return x?`<div><b>${esc(s)}</b> ${N0(x.qtd)} · ${fmtCel(x.fat)}${val.includes(s)?"":' <span class="chipx w" title="Entrou com este ID mas não está no de-para que vale">fora do de-para</span>'}</div>`:`<div class="mut">${esc(s)} —</div>`}).join("");
+      return `<tr style="border-top:1px solid var(--li);vertical-align:top"><td style="padding:5px 6px" class="mono">${esc(i.id)}</td><td style="padding:5px 6px">${esc(i.nome||"—")}</td>
+        <td style="padding:5px 6px">${i.planilha?esc(i.planilha):'<span class="mut">sem SKU</span>'}${i.variacoes?' <span class="chipx o">variações</span>':""}</td>
+        <td style="padding:5px 6px">${i.manual?`<b style="color:var(--war)">${esc(i.manual)}</b><div class="mut">${esc(i.manual_por||"")}${i.manual_em?" · "+dataHora(i.manual_em):""}</div>`:'<span class="mut">—</span>'}</td>
+        <td style="padding:5px 6px">${pac||'<span class="mut">—</span>'}</td><td style="padding:5px 6px;text-align:right">${pub?fmtCel(pub):"—"}</td></tr>`}).join("")+(fil.length>500?`<tr><td colspan="6" class="small mut" style="padding:6px">Mostrando 500 de ${fil.length}: use a busca.</td></tr>`:"")};
+  ["#dpv-q","#dpv-man","#dpv-var","#dpv-pac"].forEach(sel=>d.querySelector(sel).addEventListener("input",desenha));
+  d.querySelector("#dpv-f").onclick=()=>d.close();d.querySelector("#dpv-dp").onclick=()=>{d.close();deparaApp(uid,mk,mes)};
+  desenha();d.showModal()};
 window.limparVendas=async(cid,mk)=>{const u=E.contas.find(x=>x.id===cid),nm=mk?(E.config.marketplaces[mk]?.nome||mk):"TODOS os marketplaces";
   if(!confirm(`Limpar o relatório de vendas de hoje — ${u?u.nome:cid} · ${nm}?\n\n• O relatório (bruto, original e tratado) sai da pasta do dia e vai para a subpasta _limpos (nada é apagado).\n• O OK manual de hoje, se houver, sai também.\n• O pacote final do mês é refeito.\n\nDepois é só baixar ou subir de novo.`))return;
   const r=await post("/api/vendas/limpar",{conta_id:cid,mk:mk||"",dia:E.status.data});toast(r.ok?`Limpo: ${r.movidos.length} arquivo(s)/OK`:r.erro);if(r.ok)setTimeout(carregar,400)};

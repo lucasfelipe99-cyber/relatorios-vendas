@@ -892,6 +892,54 @@ def depara_pendentes(dados):
             "tipo": dados.get("tipo") or "ads"}
 
 
+def depara_ver(dados):
+    """Para conferir o de-para da conta: cada anúncio com o SKU da planilha, o preenchido à mão (que vale por cima)
+    e o que entrou no último pacote do mês com aquele ID (SKUs, quantidade, faturamento e publicidade)."""
+    cfg = comum.carregar_config()
+    u = comum.conta(cfg, dados.get("conta_id"))
+    mk = dados.get("mk")
+    if not u or mk not in cfg["marketplaces"] or not _lanc().tem_depara(mk):
+        return {"ok": False, "erro": "Conta ou marketplace inválido."}
+    dono_ = _lanc().dono(u)
+    cons = _consolidado()
+    m = _mes_valido(dados.get("mes")) or "%04d-%02d" % cons.mes_atual()
+    plan = _lanc().carregar_depara(cfg, dono_, mk, com_manual=False)
+    man = _lanc().depara_manual(cfg, dono_, mk)
+    inf = _lanc().info_depara(cfg, dono_, mk)
+    est = (cons.ler_estado().get(u["cliente_id"]) or {}).get(m) or {}
+    if not est.get("ok") and est.get("ultimo_ok"):
+        est = est["ultimo_ok"]
+    no_pac, erro_pac = {}, ""
+    arq = est.get("arquivo")
+    if arq and os.path.isfile(arq):
+        try:
+            df = cons.ler_excel(arq, sheet_name="DB", dtype={"SKU": str, "Id anúncio": str},
+                                usecols=["Marketplace", "Marketplace venda", "SKU", "Id anúncio", "Categoria", "Sub Categoria",
+                                         "Valor completo", "Datatype"])
+            df = df[(df["Datatype"] == "Actual") & (df["Marketplace"] == cons._nome_mk(cfg, mk))
+                    & (df["Marketplace venda"] == dono_["loja"])]
+            df = df[df["Id anúncio"].fillna("").astype(str).isin(set(plan) | set(man))]
+            cats = {cons.QTD: "qtd", cons.FAT: "fat", cons.PUB: "pub"}
+            for (an, sku, c, sc), v in df.groupby([df["Id anúncio"].astype(str), df["SKU"].fillna("").astype(str),
+                                                   "Categoria", "Sub Categoria"])["Valor completo"].sum().items():
+                campo = cats.get((c, sc))
+                if campo:
+                    x = no_pac.setdefault(an, {}).setdefault(sku, {"qtd": 0.0, "fat": 0.0, "pub": 0.0})
+                    x[campo] += float(v)
+            del df
+        except Exception as e:
+            erro_pac = str(e)
+    itens = []
+    for k in sorted(set(plan) | set(man)):
+        p_ = plan.get(k) or {}
+        mm = man.get(k) or {}
+        itens.append({"id": k, "nome": p_.get("nome") or mm.get("nome") or "", "planilha": p_.get("sku") or "",
+                      "variacoes": bool(p_.get("variacoes")), "manual": mm.get("sku") or "", "manual_por": mm.get("por") or "",
+                      "manual_em": mm.get("em") or "", "valendo": mm.get("sku") or p_.get("sku") or "",
+                      "pacote": {s: {kk: round(vv, 2) for kk, vv in x.items()} for s, x in (no_pac.get(k) or {}).items()}})
+    return {"ok": True, "mes": m, "itens": itens, "info": inf, "consolidado_em": est.get("gerado"), "erro_pacote": erro_pac}
+
+
 def salvar_depara_app(dados):
     cfg = comum.carregar_config()
     u = comum.conta(cfg, dados.get("conta_id"))
@@ -1552,6 +1600,7 @@ ACOES = {
     "/api/lancamento/limpar": limpar_lancamento,
     "/api/lancamento/depara/pendentes": depara_pendentes,
     "/api/lancamento/depara/salvar": salvar_depara_app,
+    "/api/lancamento/depara/ver": depara_ver,
     "/api/meses": visao_meses,
     "/api/painel": painel_controle,
     "/api/painel/conferir": painel_conferir,
