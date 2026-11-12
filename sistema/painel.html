@@ -354,8 +354,9 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
   <div class="card">
     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
       <h2 id="tit-trat">Tratamento de hoje</h2>
-      <div><label class="small mut">Mês <select class="mes-local" title="Mês do tratamento (o mesmo do topo da tela)"></select></label> <button class="b pri" id="bt-tratar">Tratar tudo de hoje</button><button class="b" onclick="irPara('custos')">Custos e imposto</button></div>
+      <div><label class="small mut">Mês <select class="mes-local" title="Mês do tratamento (o mesmo do topo da tela)"></select></label> <button class="b pri" id="bt-tratar">Tratar tudo de hoje</button><button class="b" id="bt-retratar-mes" hidden onclick="retratarMes()" title="Refaz o tratado mais recente do mês de cada conta e marketplace, relê os ADS e afiliados do mês e refaz o pacote final de todos os clientes, com a versão atual do sistema">Retratar o mês todo</button><button class="b" onclick="irPara('custos')">Custos e imposto</button></div>
     </div>
+    <div id="info-retratar" class="small mut" style="margin-top:6px"></div>
     <p class="small mut">Versão tratada de cada relatório subido (Faturamento, Comissão, Frete, Imposto, Custo e Margem), com imposto e custos do cliente. O tratamento roda sozinho logo depois que cada relatório é subido; aqui você acompanha, vê e refaz.</p>
     <div id="msg-trat"></div>
     <div id="bd-trat"></div>
@@ -615,6 +616,7 @@ async function carregar(){
     $("#topo").insertAdjacentHTML("beforeend",'<a class="b" id="bt-sair" href="/sair" title="Sair do sistema">Sair</a>')}
   $("#atualizado").textContent="Atualizado "+new Date().toLocaleTimeString("pt-BR");
   acNav(E.acompanhamento);
+  faixaRetratar();
   renderTudo();
   if($("#s-usuarios").classList.contains("on"))rUsuarios();
 }
@@ -1165,6 +1167,20 @@ async function rUsuarios(){if(!E)return;const eu=E.eu||{};
     <td>${u.ativo?'<span class="pill p-ok">ativo</span>':'<span class="pill p-err">bloqueado</span>'}</td><td class="small">${u.principal?"—":esc(dh(u.ultimo_acesso))}</td>
     <td style="white-space:nowrap">${u.principal?'<span class="small mut">senha no Render</span>':`<button class="bs" onclick="usEditar(${i})">Editar</button> <button class="bs" style="color:var(--err)" onclick="usRemover(${i})">Remover</button>`}</td></tr>`).join("")}</tbody>`}
 window.rUsuarios=rUsuarios;
+// ---------------------------------------------------------------- retratar o mês (versão nova)
+const dtHora=t=>t?new Date(t).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
+function faixaRetratar(){const R=E.retratar||{},b=$("#bt-retratar-mes");if(b)b.hidden=!(E.eu||{}).admin;
+  let f=document.getElementById("faixa-retratar");
+  if(R.rodando){if(!f){f=document.createElement("div");f.id="faixa-retratar";f.style.cssText="background:var(--warbg);color:var(--war);border:1px solid var(--war);border-radius:10px;padding:9px 14px;margin:0 0 12px;font-size:13px;font-weight:600";
+      (document.querySelector("main")||document.body).prepend(f)}
+    const pct=R.total?Math.round(100*R.feitos/R.total):0;
+    f.innerHTML=`⟳ Retratando o mês ${esc(R.mes||"")} com a ${esc(R.motivo||"versão nova")}: ${R.fase==="pacotes"?"gerando os pacotes finais":R.fase==="ads"?"relendo ADS e afiliados":"refazendo os tratados"} — ${R.feitos}/${R.total} (${pct}%). Os números podem mudar até terminar.`;
+    clearTimeout(window._retT);window._retT=setTimeout(()=>{window._ult=0},15000)}
+  else if(f)f.remove();
+  const u=R.rodando?null:(R.fim?R:R.ultimo),inf=$("#info-retratar");
+  if(inf)inf.innerHTML=u&&u.fim?`Último “retratar o mês” (${esc(u.mes||"")}): ${dtHora(u.fim)} — ${esc(u.motivo||"")}${u.erros?` · <span style="color:var(--err)">${u.erros} erro(s), veja o histórico</span>`:""}.`:""}
+window.retratarMes=async()=>{if(!confirm("Refazer os tratados do mês, reler ADS e afiliados do mês e refazer o pacote final de todos os clientes com a versão atual do sistema? Leva alguns minutos; o site continua funcionando."))return;
+  const r=await post("/api/tratamento/retratar-mes",{});toast(r.ok?"Retratando o mês em segundo plano":r.erro);if(r.ok)setTimeout(carregar,1500)};
 // ---------------------------------------------------------------- acompanhamento dos clientes
 let AC={itens:[],tipos:[],situacoes:{},fichas:{},niveis:{},contagem:{},visao_geral:{}};
 const AC_SIT={aberto:["p-war","A fazer"],andamento:["p-war","Em andamento"],resolvido:["p-ok","Realizado"]};

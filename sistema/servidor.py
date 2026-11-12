@@ -144,6 +144,7 @@ def montar_estado(mes=None):
         "lancamentos": _situacao_lanc_mes_atual(cfg),
         "forecasts": _forecasts_definidos(cfg),
         "acompanhamento": _acomp().contagem(cfg),
+        "retratar": estado_retratar(), "versao_regras": _versao_regras(),
         "atividade": (_atividade().recentes(30) if _atividade() else []),
         "equipe": (_atividade().quadro(cfg) if _atividade() else {}),
     }
@@ -1245,113 +1246,162 @@ def _reprocessar_antigos():
         comum.log("Reprocessar ADS/afiliados falhou: %s" % e)
 
 
-REGRA_NAO_VENDAS = 8   # sobe quando muda a regra de cancelada/devolução/não pago no tratador: refaz os tratados de hoje (uma vez)
+# ---------------------------------------------------------------- retratar o mês (versão nova do sistema)
+# Arquivos que mudam o resultado (tratamento, pacote final, ADS/afiliados/visitas). Mudou um deles num deploy:
+# ao ligar, o sistema refaz os tratados do mês e o pacote final de todos os clientes.
+ARQS_REGRAS = ("comum.py", "tratador.py", "consolidado.py", "lancamentos.py")
+_TRAVA_RETRATAR = threading.Lock()
+_RETRATAR = {}          # andamento: {"inicio", "motivo", "fase", "feitos", "total", "por", "fim", "erros"}
 
 
-def _retratar_regra_nao_vendas():
-    """Na abertura do app (computador principal): se a regra das linhas que não são venda mudou, refaz os tratados
-    de hoje que já existem (o bruto continua igual) e o pacote final dos clientes afetados."""
-    arq = os.path.join(comum.PASTA_SISTEMA, "dados", "regras_tratamento.json")
+_VERSAO = {}
+
+
+def _versao_regras():
+    """Impressão digital do código que muda os resultados (só muda num deploy: calculada uma vez)."""
+    if "v" in _VERSAO:
+        return _VERSAO["v"]
+    import glob
+    import hashlib
+    h = hashlib.sha1()
+    arqs = [os.path.join(comum.PASTA_CODIGO, a) for a in ARQS_REGRAS] + sorted(glob.glob(os.path.join(comum.PASTA_CODIGO, "tratamento_*.py")))
+    for a in arqs:
+        try:
+            with open(a, "rb") as f:
+                h.update(os.path.basename(a).encode() + b"\0" + f.read())
+        except OSError:
+            pass
+    _VERSAO["v"] = h.hexdigest()[:12]
+    return _VERSAO["v"]
+
+
+def _arq_regras():
+    return os.path.join(comum.PASTA_SISTEMA, "dados", "regras_tratamento.json")
+
+
+def _ler_regras():
     try:
-        with open(arq, "r", encoding="utf-8") as f:
-            feito = json.load(f).get("nao_vendas", 0)
+        with open(_arq_regras(), "r", encoding="utf-8") as f:
+            return json.load(f)
     except (OSError, ValueError):
-        feito = 0
-    if feito >= REGRA_NAO_VENDAS:
-        return
+        return {}
+
+
+def _gravar_regras(regras):
+    os.makedirs(os.path.dirname(_arq_regras()), exist_ok=True)
+    with open(_arq_regras() + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(regras, f, ensure_ascii=False, indent=1)
+    os.replace(_arq_regras() + ".tmp", _arq_regras())
+
+
+def retratar_mes(motivo, por="sistema"):
+    """Refaz, com o código atual, o tratado mais recente do mês de cada conta e marketplace (o que alimenta o pacote),
+    relê os ADS/afiliados do mês enviados (arquivos originais) e refaz o pacote final do mês de todos os clientes.
+    Só um por vez."""
+    if not _TRAVA_RETRATAR.acquire(blocking=False):
+        return False
     try:
+        import consolidado
         cfg = comum.carregar_config()
         hoje = dt.date.today()
-        afetados = set()
-        for u in comum.filtrar_contas(cfg, None, so_ativas=False):
-            mks = [m for m in u.get("marketplaces", []) if m in cfg["marketplaces"]
-                   and os.path.isfile(_tratador().caminho_saida(cfg, u, m, hoje))]
-            if mks:
-                _tratador().tratar_cliente(cfg, u, hoje, mks, "regra nova: cancelada/devolução/não pago")
-                afetados.add(u["cliente_id"])
-        if afetados:
-            _consolidar_depois(sorted(afetados), "regra nova: cancelada/devolução/não pago")
-        os.makedirs(os.path.dirname(arq), exist_ok=True)
-        try:
-            with open(arq, "r", encoding="utf-8") as f:
-                regras = json.load(f)
-        except (OSError, ValueError):
-            regras = {}
-        regras.update(nao_vendas=REGRA_NAO_VENDAS, em=dt.datetime.now().isoformat(timespec="seconds"))
-        with open(arq, "w", encoding="utf-8") as f:
-            json.dump(regras, f)
-        comum.log("Tratados de hoje refeitos com a regra nova de cancelada/devolução/não pago (%d cliente(s))" % len(afetados))
-    except Exception as e:
-        comum.log("Refazer tratados com a regra nova falhou: %s" % e)
+        mes = consolidado.mes_atual(hoje)
+        alvos = []
+        for u in comum.filtrar_contas(cfg, None):
+            for mk in u.get("marketplaces", []):
+                if mk not in cfg["marketplaces"]:
+                    continue
+                for d in range(0, 45):              # o dia mais recente com tratado deste mês (a fonte do pacote)
+                    dia = hoje - dt.timedelta(days=d)
+                    if consolidado.mes_atual(dia) != mes:
+                        break
+                    if os.path.isfile(_tratador().caminho_saida(cfg, u, mk, dia)):
+                        alvos.append((u, mk, dia))
+                        break
+        clientes = [c["id"] for c in cfg.get("clientes", []) if c.get("ativo") is not False]
+        donos, vistos = [], set()                   # ADS/afiliados: cada dono (conta) com arquivos enviados
+        for u in comum.filtrar_contas(cfg, None):
+            d = _lanc().dono(u)
+            chave = _lanc().pasta(cfg, d)
+            if chave not in vistos and os.path.isdir(os.path.join(chave, "_originais")):
+                vistos.add(chave)
+                donos.append(d)
+        _RETRATAR.clear()
+        _RETRATAR.update(inicio=dt.datetime.now().isoformat(timespec="seconds"), motivo=motivo, por=por, fase="tratados",
+                         feitos=0, total=len(alvos) + len(donos) + len(clientes), erros=0, mes="%02d/%04d" % (mes[1], mes[0]))
+        comum.log("Retratar o mês %02d/%04d (%s): %d tratado(s), ADS/afiliados de %d conta(s) e %d pacote(s)"
+                  % (mes[1], mes[0], motivo, len(alvos), len(donos), len(clientes)))
+        for u, mk, dia in alvos:
+            try:
+                r = _tratador().tratar(cfg, u, mk, dia, "retratar o mês: " + motivo)
+                if not (r or {}).get("ok", True):
+                    _RETRATAR["erros"] += 1
+            except Exception as e:
+                _RETRATAR["erros"] += 1
+                comum.log("Retratar %s %s: %s" % (u["nome"], mk, e))
+            _RETRATAR["feitos"] += 1
+            comum.devolver_memoria()
+        _RETRATAR["fase"] = "ads"
+        for d in donos:
+            try:
+                r = _lanc().reprocessar(cfg, d, so_mes=mes)
+                if r.get("erros"):
+                    _RETRATAR["erros"] += len(r["erros"])
+            except Exception as e:
+                _RETRATAR["erros"] += 1
+                comum.log("ADS/afiliados de %s ao retratar o mês: %s" % (d.get("nome"), e))
+            _RETRATAR["feitos"] += 1
+            comum.devolver_memoria()
+        _RETRATAR["fase"] = "pacotes"
+        for cid in clientes:
+            try:
+                consolidado.gerar_clientes(cfg, [cid], mes[0], mes[1], origem="retratar o mês: " + motivo)
+            except Exception as e:
+                _RETRATAR["erros"] += 1
+                comum.log("Pacote de %s ao retratar o mês: %s" % (cid, e))
+            _RETRATAR["feitos"] += 1
+            comum.devolver_memoria()
+        _RETRATAR.update(fase="pronto", fim=dt.datetime.now().isoformat(timespec="seconds"))
+        regras = _ler_regras()
+        regras.update(ultimo_retratar=dict(_RETRATAR))
+        _gravar_regras(regras)
+        comum.log("Mês retratado (%s): %d tratado(s), ADS/afiliados de %d conta(s), %d pacote(s), %d erro(s)"
+                  % (motivo, len(alvos), len(donos), len(clientes), _RETRATAR["erros"]))
+        return True
+    finally:
+        _TRAVA_RETRATAR.release()
 
 
-# pedido sem SKU: SKU = nome do produto + variação. Cada regra refaz uma vez o tratado mais recente do marketplace.
-REGRAS_SEM_SKU = (("shopee_variacao", 1, "shopee", "Shopee sem SKU usa nome + variação"),          # 12/11/2026
-                  ("tiktok_variacao", 1, "tiktokshop", "TikTok sem Seller SKU usa nome + variação"))  # 12/11/2026
-
-
-REGRA_ADS_RATEIO = 1   # ADS de anúncio com variações: rateio pelas unidades vendidas no dia (12/11/2026)
-
-
-def _refazer_pacotes_rateio():
-    """Uma vez: refaz o pacote final do mês de todos os clientes com o rateio novo do ADS."""
-    arq = os.path.join(comum.PASTA_SISTEMA, "dados", "regras_tratamento.json")
-    try:
-        with open(arq, "r", encoding="utf-8") as f:
-            regras = json.load(f)
-    except (OSError, ValueError):
-        regras = {}
-    if regras.get("ads_rateio_dia", 0) >= REGRA_ADS_RATEIO:
+def _retratar_mes_se_mudou():
+    """Ao ligar: se o código do tratamento/pacote mudou desde a última vez, retrata o mês com a versão nova."""
+    versao = _versao_regras()
+    regras = _ler_regras()
+    if regras.get("versao_regras") == versao:
         return
     try:
-        cfg = comum.carregar_config()
-        ids = [c["id"] for c in cfg.get("clientes", []) if c.get("ativo") is not False]
-        if ids:
-            _consolidar_depois(ids, "regra nova: ADS de anúncio com variações rateado pelas unidades do dia")
-        regras.update(ads_rateio_dia=REGRA_ADS_RATEIO, ads_rateio_dia_em=dt.datetime.now().isoformat(timespec="seconds"))
-        os.makedirs(os.path.dirname(arq), exist_ok=True)
-        with open(arq, "w", encoding="utf-8") as f:
-            json.dump(regras, f)
-        comum.log("ADS com variações (rateio pelo dia): pacote do mês refeito para %d cliente(s)" % len(ids))
+        motivo = "versão nova do sistema (%s)" % versao
+        if retratar_mes(motivo):
+            regras = _ler_regras()
+            regras.update(versao_regras=versao, versao_regras_em=dt.datetime.now().isoformat(timespec="seconds"))
+            _gravar_regras(regras)
     except Exception as e:
-        comum.log("Refazer pacotes com o rateio novo do ADS falhou: %s" % e)
+        comum.log("Retratar o mês com a versão nova falhou: %s" % e)
 
 
-def _retratar_sem_sku():
-    """Uma vez por regra: refaz o tratado mais recente do marketplace em cada conta (a fonte do pacote do mês)
-    e o pacote final dos clientes afetados."""
-    arq = os.path.join(comum.PASTA_SISTEMA, "dados", "regras_tratamento.json")
-    for chave, versao, mk, motivo in REGRAS_SEM_SKU:
-        try:
-            with open(arq, "r", encoding="utf-8") as f:
-                regras = json.load(f)
-        except (OSError, ValueError):
-            regras = {}
-        if regras.get(chave, 0) >= versao:
-            continue
-        try:
-            cfg = comum.carregar_config()
-            hoje = dt.date.today()
-            afetados, n = set(), 0
-            for u in comum.filtrar_contas(cfg, None, so_ativas=False):
-                if mk not in u.get("marketplaces", []):
-                    continue
-                for d in range(0, 40):
-                    dia = hoje - dt.timedelta(days=d)
-                    if os.path.isfile(_tratador().caminho_saida(cfg, u, mk, dia)):
-                        _tratador().tratar_cliente(cfg, u, dia, [mk], "regra nova: " + motivo)
-                        afetados.add(u["cliente_id"])
-                        n += 1
-                        break
-            if afetados:
-                _consolidar_depois(sorted(afetados), "regra nova: " + motivo)
-            regras.update({chave: versao, chave + "_em": dt.datetime.now().isoformat(timespec="seconds")})
-            os.makedirs(os.path.dirname(arq), exist_ok=True)
-            with open(arq, "w", encoding="utf-8") as f:
-                json.dump(regras, f)
-            comum.log("%s: %d tratado(s) refeito(s), %d cliente(s)" % (motivo, n, len(afetados)))
-        except Exception as e:
-            comum.log("Refazer tratados (%s) falhou: %s" % (motivo, e))
+def acao_retratar_mes(dados):
+    if not dados.get("_admin"):
+        return {"ok": False, "erro": "Só um admin pode retratar o mês todo."}
+    if _TRAVA_RETRATAR.locked():
+        return {"ok": False, "erro": "Já está retratando o mês. Acompanhe o aviso no topo."}
+    threading.Thread(target=retratar_mes, args=("pedido por %s" % (dados.get("_por") or "admin"), dados.get("_por") or ""),
+                     daemon=True).start()
+    return {"ok": True, "msg": "Retratando o mês em segundo plano."}
+
+
+def estado_retratar():
+    if not _RETRATAR:
+        u = _ler_regras().get("ultimo_retratar")
+        return {"ultimo": u} if u else {}
+    return dict(_RETRATAR, rodando=_TRAVA_RETRATAR.locked())
 
 
 def situacao_lancamentos(dados):
@@ -2106,6 +2156,7 @@ def acomp_importar(dados):
     return dict(r, ok=True)
 
 
+ACOES["/api/tratamento/retratar-mes"] = acao_retratar_mes
 ACOES["/api/acompanhamento/ficha"] = acomp_ficha
 ACOES["/api/acompanhamento/visao"] = acomp_visao
 ACOES["/api/acompanhamento/importar"] = acomp_importar
@@ -2124,9 +2175,8 @@ def _aquecer_painel(espera=0):
 def _ao_iniciar():
     """Trabalhos de quando o sistema liga, um depois do outro (juntos, estouravam a memória do plano online)."""
     _reprocessar_antigos()
-    _retratar_regra_nao_vendas()
-    _retratar_sem_sku()
-    _refazer_pacotes_rateio()
+    comum.devolver_memoria()
+    _retratar_mes_se_mudou()
     comum.devolver_memoria()
     _aquecer_painel(20)
     comum.devolver_memoria()

@@ -1814,9 +1814,10 @@ def _recuperar_recusados(base, idx):
     return recuperados
 
 
-def reprocessar(cfg, cliente):
+def reprocessar(cfg, cliente, so_mes=None):
     """Relê todos os arquivos enviados (em _originais), na ordem em que foram enviados, e refaz os
-    padronizados do zero. Usado quando a leitura melhora. Devolve {(tipo, mk, mês): linhas} e erros."""
+    padronizados do zero. Usado quando a leitura melhora. Devolve {(tipo, mk, mês): linhas} e erros.
+    so_mes=(ano, mês): só regrava os padronizados desse mês (os outros meses ficam como estão)."""
     base = pasta(cfg, cliente)
     orig = os.path.join(base, "_originais")
     if not os.path.isdir(orig):
@@ -1865,6 +1866,8 @@ def reprocessar(cfg, cliente):
     carimbo = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     feitos = []
     for (tipo, mk, a, m), ls in sorted(estado.items()):
+        if so_mes and (a, m) != tuple(so_mes):
+            continue
         destino = caminho(cfg, cliente, tipo, mk, a, m)
         if os.path.isfile(destino):
             ant = os.path.join(base, "_anteriores", os.path.basename(destino).replace(".xlsx", "_%s_antes-reprocessar.xlsx" % carimbo))
@@ -1873,8 +1876,9 @@ def reprocessar(cfg, cliente):
         juntas = sorted(ls, key=lambda l: (l["Data"], l.get("Id anúncio") or "", l.get("Id do pedido") or ""))
         _gravar(juntas, tipo, destino)
         feitos.append(dict(resumo(juntas, tipo), tipo=tipo, mk=mk, mes="%04d-%02d" % (a, m)))
-    with open(os.path.join(base, ".versao_leitor"), "w") as fh:
-        fh.write(str(LEITOR_VERSAO))
+    if not so_mes:
+        with open(os.path.join(base, ".versao_leitor"), "w") as fh:
+            fh.write(str(LEITOR_VERSAO))
     comum.log("[%s] ADS/afiliados reprocessados: %s%s" % (cliente["nome"], ", ".join("%s %s %s" % (x["tipo"], x["mk"], x["mes"]) for x in feitos),
                                                        (" · erros: " + "; ".join(erros)) if erros else ""))
     return {"meses": feitos, "erros": erros}
