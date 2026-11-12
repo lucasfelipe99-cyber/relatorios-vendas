@@ -952,9 +952,12 @@ def guardar_depara(cfg, dono_, nome_original, conteudo, mk="shopee"):
         json.dump({"atualizado": dt.datetime.now().isoformat(timespec="seconds"), "origem": os.path.basename(nome_original),
                    "anuncios": atual}, f, ensure_ascii=False)
     os.replace(arq + ".novo", arq)
+    # de-para atualizado: o preenchido à mão no app sai dos anúncios que a planilha trouxe com SKU (a planilha passa a valer)
+    tirados = _tirar_manual_coberto(cfg, dono_, mk, {k for k, v in novo.items() if v.get("sku")})
     info = {"no_arquivo": len(novo), "total": len(atual), "novos": novos, "mudaram": mudaram,
             "sem_sku": sum(1 for v in novo.values() if not v["sku"]),
-            "com_variacoes": sum(1 for v in novo.values() if v.get("variacoes"))}
+            "com_variacoes": sum(1 for v in novo.values() if v.get("variacoes")),
+            "manuais_tirados": len(tirados)}
     comum.log("[%s] de-para %s: %d anúncios no arquivo (%d novos, %d com SKU trocado), %d no total"
               % (dono_["nome"], mk, info["no_arquivo"], novos, mudaram, info["total"]))
     return info
@@ -1044,6 +1047,29 @@ def skus_lista(texto):
         if x and x not in vistos:
             vistos.append(x)
     return vistos
+
+
+def _tirar_manual_coberto(cfg, dono_, mk, ids):
+    """Tira do de-para manual os anúncios em `ids` (guarda cópia do que saiu em _anteriores). Devolve os tirados."""
+    import json
+    man = depara_manual(cfg, dono_, mk)
+    tirados = {k: man[k] for k in list(man) if k in ids}
+    if not tirados:
+        return {}
+    base = pasta(cfg, dono_)
+    ant = os.path.join(base, "_anteriores", "depara_manual_%s_%s_tirado-pela-planilha.json" % (mk, dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+    os.makedirs(os.path.dirname(ant), exist_ok=True)
+    with open(ant, "w", encoding="utf-8") as f:
+        json.dump({"anuncios": tirados}, f, ensure_ascii=False, indent=1)
+    for k in tirados:
+        man.pop(k, None)
+    arq = _depara_manual_arq(cfg, dono_, mk)
+    with open(arq + ".novo", "w", encoding="utf-8") as f:
+        json.dump({"atualizado": dt.datetime.now().isoformat(timespec="seconds"), "anuncios": man}, f, ensure_ascii=False, indent=1)
+    os.replace(arq + ".novo", arq)
+    comum.log("[%s] de-para %s: %d preenchido(s) no app substituído(s) pela planilha: %s"
+              % (dono_["nome"], mk, len(tirados), ", ".join(sorted(tirados))[:300]))
+    return tirados
 
 
 def salvar_depara_manual(cfg, dono_, mk, itens, por=""):
