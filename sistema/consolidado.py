@@ -358,6 +358,8 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
             com_sku = df[(df["Marketplace"] == nome) & (df["SKU"] != "") & (df["Id anúncio"] != "")]
             sku_do_anuncio = com_sku.groupby(com_sku["Id anúncio"].astype(str))["SKU"].agg(lambda x: x.value_counts().index[0]).to_dict() if len(com_sku) else {}
             usados = set()
+            dp_afi = lancamentos.carregar_depara(cfg, d, mk) if lancamentos.tem_depara(mk) else None
+            rep_afi = {}
             for i in itens:
                 g = por_pedido.get(i.get("Id do pedido"))
                 if g is not None and len(g) and i.get("Id anúncio"):
@@ -375,10 +377,20 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                 else:
                     resumo["afiliados_sem_pedido"] += 1
                     resumo["afiliados_sem_pedido_por"][chave_k] = resumo["afiliados_sem_pedido_por"].get(chave_k, 0) + 1
-                    novas.append({"Pedido": i.get("Id do pedido", ""), "Marketplace venda": loja,
-                                  "SKU": i.get("SKU") or sku_do_anuncio.get(str(i.get("Id anúncio") or "")) or "0",
-                                  "Id anúncio": i.get("Id anúncio", ""), "Data": pd.Timestamp(i["Data"]), "Categoria": AFI[0],
-                                  "Sub Categoria": AFI[1], "Valor completo": -i["Comissão afiliado"], "Marketplace": nome, "Type": "Afiliados"})
+                    an_i = str(i.get("Id anúncio") or "")
+                    sku_i = i.get("SKU") or sku_do_anuncio.get(an_i) or ""
+                    if not sku_i and an_i and dp_afi is not None:
+                        # pedido fora das vendas do mês: o SKU vem do de-para do anúncio (com variações, rateado pelo faturamento)
+                        sku_i = (dp_afi.get(an_i) or {}).get("sku") or ""
+                        if mk == "shopee" and sku_i:
+                            sku_i = _skus_como_vendas_shopee(sku_i)
+                    sku_i = sku_i or "0"
+                    rp = [(x, w) for x, w in _repartir(df, nome, loja, sku_i, rep_afi, dia=i["Data"]) if w > 0] or [(sku_i, 1.0)]
+                    for sku_p, w in rp:
+                        novas.append({"Pedido": i.get("Id do pedido", ""), "Marketplace venda": loja,
+                                      "SKU": sku_p, "Id anúncio": i.get("Id anúncio", ""), "Data": pd.Timestamp(i["Data"]),
+                                      "Categoria": AFI[0], "Sub Categoria": AFI[1], "Valor completo": -i["Comissão afiliado"] * w,
+                                      "Marketplace": nome, "Type": "Afiliados"})
             resumo["afiliados_pedidos_achados"][chave_k] = [len(achados), len(pedidos)]
 
         ads_mes = lancamentos.carregar(cfg, d, "ads", ano, mes)
