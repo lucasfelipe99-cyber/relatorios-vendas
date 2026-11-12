@@ -141,6 +141,15 @@ def transformar_tiktok(
     df["Líquido"] = df["Faturamento"] + df["Comissão"] + df["Frete"]
     df["Imposto"] = float(aliquota_imposto) * -df["Faturamento"]
     df["Seller SKU"] = df["Seller SKU"].astype(str).str.strip()
+    # Sem Seller SKU: o SKU vira "Product Name Variation" (cada variação separada); variação "Padrão" fica só o título
+    sem_sku = df["Seller SKU"].isna() | df["Seller SKU"].fillna("").str.lower().isin(["", "nan", "none", "-", "--"])
+    if sem_sku.any():
+        nome = df["Product Name"].map(lambda v: "" if pd.isna(v) else str(v))
+        var = df["Variation"].map(lambda v: "" if pd.isna(v) else str(v).strip()) if "Variation" in df.columns \
+            else pd.Series("", index=df.index)
+        var = var.where(~var.str.lower().isin(["padrão", "padrao", "default"]), "")
+        junto = (nome + " " + var).str.replace(r"\s+", " ", regex=True).str.strip()
+        df.loc[sem_sku & junto.ne(""), "Seller SKU"] = junto[sem_sku & junto.ne("")]
     custo = custos[["SKU", "Valor total"]].copy()
     custo["SKU"] = custo["SKU"].astype(str).str.strip()
     df = df.merge(custo, left_on="Seller SKU", right_on="SKU", how="left", validate="many_to_one")
