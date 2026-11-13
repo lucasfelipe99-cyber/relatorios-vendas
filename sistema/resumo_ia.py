@@ -191,7 +191,7 @@ def gerar(cfg, cliente_id, mes, por):
     if not configurada():
         raise ValueError("A IA não está configurada: falta a chave ANTHROPIC_API_KEY nas variáveis do Render (Environment).")
     dados = montar_dados(cfg, cliente_id, mes)
-    corpo = {"model": modelo(), "max_tokens": 4000, "system": SISTEMA,
+    corpo = {"model": modelo(), "max_tokens": 16000, "system": SISTEMA,
              "messages": [{"role": "user", "content": PEDIDO.format(
                  cliente=dados["cliente"], mes=dados["mes"], hoje=dados["hoje"],
                  dados=json.dumps(dados, ensure_ascii=False, indent=1, default=str))}]}
@@ -200,7 +200,7 @@ def gerar(cfg, cliente_id, mes, por):
                                  headers={"x-api-key": os.environ["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01",
                                           "content-type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=180) as r:
+        with urllib.request.urlopen(req, timeout=300) as r:
             resp = json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         try:
@@ -216,6 +216,14 @@ def gerar(cfg, cliente_id, mes, por):
     except (urllib.error.URLError, TimeoutError) as e:
         raise ValueError("Não consegui falar com a IA (%s). Tente de novo." % e)
     texto = "".join(b.get("text", "") for b in resp.get("content", []) if b.get("type") == "text").strip()
+    parada = resp.get("stop_reason") or ""
+    comum.log("resumo IA: modelo %s, parada %s, blocos %s, %d caracteres, uso %s" % (
+        resp.get("model"), parada, [b.get("type") for b in resp.get("content", [])], len(texto), resp.get("usage")))
+    if parada == "max_tokens":
+        # o modelo gastou o limite (inclusive pensando) antes de terminar o texto: não guarda resumo cortado
+        raise ValueError("A IA não terminou o resumo (limite de tamanho atingido). Tente de novo.")
+    if parada == "refusal":
+        raise ValueError("A IA recusou gerar este resumo. Tente de novo ou ajuste o contexto.")
     if not texto:
         raise ValueError("A IA não devolveu texto. Tente de novo.")
     uso = resp.get("usage") or {}
