@@ -850,7 +850,18 @@ def _dia_forcado(tipo, mk, nome, caminho=None):
 DEPARA = {
     "shopee": {"nome": "mass_update da Shopee (informações básicas)", "id": "ID do Produto", "sku": "SKU de referência"},
     "magalu": {"nome": "mass_update da Magalu (planilha de produtos)", "id": "Código site Magalu", "sku": "SKU"},
+    "mercadolivre": {"nome": "planilha de anúncios do Mercado Livre (Anúncios > Editar em massa / exportar)",
+                     "id": "Código do anúncio (MLB)", "sku": "SKU"},
 }
+DEPARA_ADS_POR_PLANILHA = ("shopee", "magalu")   # o ADS desses vem só pelo de-para; no ML as vendas do mês vêm primeiro
+
+
+def id_ml(v):
+    """Código do anúncio do Mercado Livre como nas vendas: "MLB" + número."""
+    t = str(v or "").strip().upper().replace("-", "").replace(" ", "")
+    if t.isdigit():
+        t = "MLB" + t
+    return t if re.match(r"^ML[A-Z]\d{6,}$", t) else ""
 
 
 def tem_depara(mk):
@@ -879,6 +890,13 @@ def ler_depara(mk, caminho):
         ok_sku = lambda k: k == "sku"
         ok_nome = lambda k: k.startswith("tituloproduto") or k.startswith("titulodoproduto")
         id_valido = lambda v: bool(v) and " " not in v and not v.lower().startswith("exemplo")
+    elif mk == "mercadolivre":
+        ok_id = lambda k: k in ("codigodoanuncio", "numerodoanuncio", "iddoanuncio", "itemid", "anuncio", "mlb", "deanuncio",
+                                "codigodoanunciomlb", "numeroanuncio", "codigoanuncio", "idanuncio")
+        ok_sku = lambda k: k in ("sku", "sellersku", "skudoanuncio", "codigosku", "codigodoproduto", "skuprincipal")
+        var_col = lambda k: k in ("skudavariacao", "skudavariante", "variationsku", "skuvariacao", "sellerskudavariacao")
+        ok_nome = lambda k: k.startswith("titulo") or k == "title"
+        id_valido = lambda v: bool(id_ml(v))
     else:
         raise ValueError("Marketplace sem de-para.")
     melhor = {}
@@ -895,8 +913,15 @@ def ler_depara(mk, caminho):
                                                                or k.startswith("variationid") for k in ks))
             cel = lambda r, j: _texto(r[j]) if j is not None and j < len(r) else ""
             saida = {}
+            ultimo = ""
             for r in linhas[n + 1:]:
                 pid = cel(r, ji)
+                if mk == "mercadolivre":
+                    # ML: linhas de variação podem vir sem o código do anúncio, logo abaixo da linha do anúncio
+                    if not pid and ultimo and (cel(r, jv) or cel(r, jp)):
+                        pid = ultimo
+                    pid = id_ml(pid)
+                    ultimo = pid or ultimo
                 if not id_valido(pid):
                     continue
                 d = saida.setdefault(pid, {"sku": [], "nome": cel(r, jn)[:120]})
@@ -908,7 +933,7 @@ def ler_depara(mk, caminho):
                     if x not in d["sku"]:
                         d["sku"].append(x)
             for d in saida.values():
-                if tem_var and len(d["sku"]) > 1:
+                if (tem_var or mk == "mercadolivre") and len(d["sku"]) > 1:
                     d["variacoes"] = True
                 d["sku"] = ", ".join(d["sku"])
             if len(saida) > len(melhor) or (len(saida) == len(melhor) and saida and jn is not None):

@@ -407,7 +407,9 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
             sub = base_sku[base_sku["Marketplace venda"] == loja]
             sku_conta = sub.groupby("Id anúncio")["SKU"].agg(lambda x: x.value_counts().index[0]).to_dict() if len(sub) else {}
             sku_geral = base_sku.groupby("Id anúncio")["SKU"].agg(lambda x: x.value_counts().index[0]).to_dict() if len(base_sku) else {}
-            depara = lancamentos.carregar_depara(cfg, d, mk) if lancamentos.tem_depara(mk) else None
+            depara = lancamentos.carregar_depara(cfg, d, mk) if mk in lancamentos.DEPARA_ADS_POR_PLANILHA else None
+            # Mercado Livre: planilha de anúncios (de-para) — usada quando o anúncio não vendeu no mês ou tem variações
+            dp_ml = lancamentos.carregar_depara(cfg, d, mk) if mk == "mercadolivre" else {}
             skus_vendas = set(base_sku["SKU"].astype(str))
             sem_depara, nomes_sem = {}, {}
             manual_tt = lancamentos.depara_manual(cfg, d, mk)
@@ -459,7 +461,18 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                             if v:
                                 novas.append(dict(base, Categoria=cat, **{"Sub Categoria": sc, "Valor completo": v * w}))
                     continue
-                sku = i.get("SKU") or sku_conta.get(an) or sku_geral.get(an) or ""
+                sku = i.get("SKU") or ""
+                if not sku and dp_ml:
+                    # ML: anúncio com variações na planilha (e alguma delas vendendo no mês): reparte entre as variações;
+                    # sem venda no mês: o SKU da planilha. Com venda e um SKU só: o SKU das vendas, como antes.
+                    sk_dp = (dp_ml.get(lancamentos.id_ml(an)) or {}).get("sku") or ""
+                    lst = lancamentos.skus_lista(sk_dp)
+                    vend = sku_conta.get(an) or sku_geral.get(an)
+                    if len(lst) > 1 and any(x in skus_vendas for x in lst):
+                        sku = sk_dp
+                    elif not vend and lst:
+                        sku = sk_dp
+                sku = sku or sku_conta.get(an) or sku_geral.get(an) or ""
                 if not sku and mk != "tiktokshop" and (manual_tt.get(an) or {}).get("sku"):
                     sku = manual_tt[an]["sku"]          # apontado à mão no app
                 if not sku and mk == "tiktokshop":
@@ -483,14 +496,14 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                 varios = len(lancamentos.skus_lista(sku)) > 1
                 rp = [(x, w) for x, w in _repartir(df, nome, loja, sku, rep_cache, dia=i["Data"]) if w > 0]
                 for sku_p, w in rp:
-                    base = {"Pedido": "", "Marketplace venda": loja, "SKU": sku_p, "Id anúncio": sku_p if varios else an,
+                    base = {"Pedido": "", "Marketplace venda": loja, "SKU": sku_p, "Id anúncio": sku_p if (varios and mk != "mercadolivre") else an,
                             "Data": pd.Timestamp(i["Data"]), "Marketplace": nome, "Type": "Organico"}
                     for (cat, sc), v in ((PUB, -i["Gasto"]), (CLQ, i["Cliques"]), (ADF, i["Receita ADS"])):
                         if v:
                             novas.append(dict(base, Categoria=cat, **{"Sub Categoria": sc, "Valor completo": v * w}))
             if depara is not None or sem_depara:
                 resumo["ads_sem_depara"]["%s|%s" % (u["id"], mk)] = {
-                    "tem_depara": bool(depara) or mk == "tiktokshop",
+                    "tem_depara": bool(depara) or bool(dp_ml) or mk == "tiktokshop",
                     "ids": {k: round(v, 2) for k, v in sorted(sem_depara.items(), key=lambda x: -x[1])},
                     "nomes": {k: nomes_sem.get(k, "") for k in sem_depara}}
         # visitas & conversão: visitas únicas e quantidade de vendas por anúncio e dia
@@ -543,7 +556,7 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                     sku = sku_norm.get(_sku_norm(sku), sku)
                 if sku:
                     if (sku, an) not in pares:             # anúncio que não vende esse SKU: usa o anúncio do SKU nas vendas
-                        an = an_conta.get(sku) or an_geral.get(sku) or (sku if mk in lancamentos.DEPARA else an)
+                        an = an_conta.get(sku) or an_geral.get(sku) or (sku if mk in lancamentos.DEPARA_ADS_POR_PLANILHA else an)
                 else:
                     sem_sku += 1
                     sem_ids[an] = sem_ids.get(an, 0.0) + (i.get("Visitas") or 0)
