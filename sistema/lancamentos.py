@@ -853,6 +853,16 @@ DEPARA = {
     "mercadolivre": {"nome": "planilha de anúncios do Mercado Livre (Anúncios > Editar em massa / exportar)",
                      "id": "Código do anúncio (MLB)", "sku": "SKU"},
 }
+_OUTROS_DP = {
+    "amazon": ("Amazon", "relatório de anúncios da Amazon (Inventário > Relatórios de inventário > Todos os anúncios)", "ASIN"),
+    "tiktokshop": ("TikTok", "lista de produtos exportada do TikTok Shop (Produtos > Gerenciar produtos > Exportar)", "Product ID"),
+    "viavarejo": ("Casas Bahia", "planilha de produtos/anúncios exportada da Casas Bahia", "código do anúncio"),
+    "temu": ("Temu", "planilha de produtos exportada da Temu", "código do produto"),
+    "madeiramadeira": ("MadeiraMadeira", "planilha de produtos exportada da MadeiraMadeira", "código do anúncio"),
+    "site": ("Site", "planilha de produtos do site", "código do produto"),
+}
+for _k, (_n, _p, _i) in _OUTROS_DP.items():
+    DEPARA.setdefault(_k, {"nome": _p, "id": _i, "sku": "SKU"})
 DEPARA_ADS_POR_PLANILHA = ("shopee", "magalu")   # o ADS desses vem só pelo de-para; no ML as vendas do mês vêm primeiro
 
 
@@ -862,6 +872,14 @@ def id_ml(v):
     if t.isdigit():
         t = "MLB" + t
     return t if re.match(r"^ML[A-Z]\d{6,}$", t) else ""
+
+
+def id_depara(mk, v):
+    """Código do anúncio como fica guardado no de-para (e como vem nas vendas/ADS)."""
+    if mk == "mercadolivre":
+        return id_ml(v)
+    t = _texto(v)
+    return t[:-2] if t.endswith(".0") and t[:-2].isdigit() else t
 
 
 def tem_depara(mk):
@@ -897,6 +915,20 @@ def ler_depara(mk, caminho):
         var_col = lambda k: k in ("skudavariacao", "skudavariante", "variationsku", "skuvariacao", "sellerskudavariacao")
         ok_nome = lambda k: k.startswith("titulo") or k == "title"
         id_valido = lambda v: bool(id_ml(v))
+    elif mk in DEPARA:
+        # demais canais: planilha de produtos/anúncios exportada do canal (código do anúncio + SKU, uma linha por variação)
+        ids_ok = {
+            "amazon": ("asin", "asin1", "asinpai", "parentasin", "asindoproduto"),
+            "tiktokshop": ("productid", "iddoproduto", "idproduto", "iddeproduto"),
+        }.get(mk, ()) + (() if mk == "amazon" else ("codigodoanuncio", "numerodoanuncio", "iddoanuncio", "idanuncio", "codigoanuncio", "anuncio", "deanuncio",
+                         "codigodoproduto", "iddoproduto", "codigoproduto", "idproduto", "productid", "itemid", "goodsid",
+                         "idmadeira", "codigomadeira", "codigoviavarejo", "codigosite", "listingid"))
+        ok_id = lambda k: k in ids_ok
+        ok_sku = lambda k: k in ("sku", "sellersku", "skudoseller", "skuseller", "codigosku", "skuprincipal", "skupai",
+                                 "parentsku", "skudoanuncio", "skudoproduto", "codigodoseller", "referencia")
+        var_col = lambda k: k in ("skudavariacao", "skudavariante", "variationsku", "skuvariacao", "sellerskudavariacao")
+        ok_nome = lambda k: k.startswith("titulo") or k.startswith("nomedoproduto") or k in ("itemname", "productname", "title", "nome")
+        id_valido = lambda v: bool(v) and " " not in v and len(v) <= 60 and not v.lower().startswith(("exemplo", "example"))
     else:
         raise ValueError("Marketplace sem de-para.")
     melhor = {}
@@ -916,11 +948,11 @@ def ler_depara(mk, caminho):
             ultimo = ""
             for r in linhas[n + 1:]:
                 pid = cel(r, ji)
-                if mk == "mercadolivre":
-                    # ML: linhas de variação podem vir sem o código do anúncio, logo abaixo da linha do anúncio
+                if mk not in DEPARA_ADS_POR_PLANILHA:
+                    # linhas de variação podem vir sem o código do anúncio, logo abaixo da linha do anúncio
                     if not pid and ultimo and (cel(r, jv) or cel(r, jp)):
                         pid = ultimo
-                    pid = id_ml(pid)
+                    pid = id_depara(mk, pid)
                     ultimo = pid or ultimo
                 if not id_valido(pid):
                     continue
@@ -933,7 +965,7 @@ def ler_depara(mk, caminho):
                     if x not in d["sku"]:
                         d["sku"].append(x)
             for d in saida.values():
-                if (tem_var or mk == "mercadolivre") and len(d["sku"]) > 1:
+                if (tem_var or mk not in DEPARA_ADS_POR_PLANILHA) and len(d["sku"]) > 1:
                     d["variacoes"] = True
                 d["sku"] = ", ".join(d["sku"])
             if len(saida) > len(melhor) or (len(saida) == len(melhor) and saida and jn is not None):

@@ -408,8 +408,12 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
             sku_conta = sub.groupby("Id anúncio")["SKU"].agg(lambda x: x.value_counts().index[0]).to_dict() if len(sub) else {}
             sku_geral = base_sku.groupby("Id anúncio")["SKU"].agg(lambda x: x.value_counts().index[0]).to_dict() if len(base_sku) else {}
             depara = lancamentos.carregar_depara(cfg, d, mk) if mk in lancamentos.DEPARA_ADS_POR_PLANILHA else None
-            # Mercado Livre: planilha de anúncios (de-para) — usada quando o anúncio não vendeu no mês ou tem variações
-            dp_ml = lancamentos.carregar_depara(cfg, d, mk) if mk == "mercadolivre" else {}
+            # demais canais (ML, Amazon, TikTok...): planilha de anúncios (de-para) — usada quando o anúncio não vendeu
+            # no mês ou tem variações; com venda e um SKU só, vale o SKU das vendas
+            dp_ml = lancamentos.carregar_depara(cfg, d, mk) if (lancamentos.tem_depara(mk) and depara is None) else {}
+            # TikTok: o anúncio das vendas é o SKU ID de cada variação
+            an_tt = sub.groupby("SKU")["Id anúncio"].agg(lambda x: x.value_counts().index[0]).to_dict() \
+                if (mk == "tiktokshop" and len(sub)) else {}
             skus_vendas = set(base_sku["SKU"].astype(str))
             sem_depara, nomes_sem = {}, {}
             manual_tt = lancamentos.depara_manual(cfg, d, mk)
@@ -465,7 +469,7 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                 if not sku and dp_ml:
                     # ML: anúncio com variações na planilha (e alguma delas vendendo no mês): reparte entre as variações;
                     # sem venda no mês: o SKU da planilha. Com venda e um SKU só: o SKU das vendas, como antes.
-                    sk_dp = (dp_ml.get(lancamentos.id_ml(an)) or {}).get("sku") or ""
+                    sk_dp = (dp_ml.get(lancamentos.id_depara(mk, an)) or dp_ml.get(str(an)) or {}).get("sku") or ""
                     lst = lancamentos.skus_lista(sk_dp)
                     vend = sku_conta.get(an) or sku_geral.get(an)
                     if len(lst) > 1 and any(x in skus_vendas for x in lst):
@@ -496,7 +500,7 @@ def _aplicar_lancamentos(cfg, cliente, df, ano, mes, nomes_tiktok=None):
                 varios = len(lancamentos.skus_lista(sku)) > 1
                 rp = [(x, w) for x, w in _repartir(df, nome, loja, sku, rep_cache, dia=i["Data"]) if w > 0]
                 for sku_p, w in rp:
-                    base = {"Pedido": "", "Marketplace venda": loja, "SKU": sku_p, "Id anúncio": sku_p if (varios and mk != "mercadolivre") else an,
+                    base = {"Pedido": "", "Marketplace venda": loja, "SKU": sku_p, "Id anúncio": (an_tt.get(sku_p) or sku_p) if (varios and mk == "tiktokshop") else an,
                             "Data": pd.Timestamp(i["Data"]), "Marketplace": nome, "Type": "Organico"}
                     for (cat, sc), v in ((PUB, -i["Gasto"]), (CLQ, i["Cliques"]), (ADF, i["Receita ADS"])):
                         if v:
