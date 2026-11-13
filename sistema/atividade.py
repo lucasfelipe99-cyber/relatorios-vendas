@@ -27,7 +27,7 @@ TTL_ACAO = 30 * 60
 
 ABAS = {"status": "Painel geral", "vendas": "Vendas", "tratamento": "Tratamento", "ads": "ADS", "afiliados": "Afiliados",
         "pacote": "Pacote final", "meses": "Mês a mês", "forecast": "Forecast", "planilhas": "Planilhas", "clientes": "Clientes", "acomp": "Acompanhamento",
-        "visitas": "Visita & Conversão", "traducao": "Tradução de SKU", "custos": "Custos e imposto", "usuarios": "Usuários",
+        "visitas": "Visita & Conversão", "traducao": "Tradução de SKU", "custos": "Custos e imposto", "usuarios": "Usuários", "resumo": "Resumo IA", "depara": "De-para",
         "ajuda": "Ajuda"}
 
 
@@ -94,6 +94,9 @@ def descrever(caminho, dados, cfg):
         "/api/acompanhamento/ficha": ("editando a ficha de acompanhamento", "acomp-ficha|%s" % cid, False),
         "/api/acompanhamento/visao": ("editando o direcionamento geral", "acomp-geral", False),
         "/api/acompanhamento/importar": ("importando acompanhamento", "acomp-importar", True),
+        "/api/ia/contexto": ("escrevendo o contexto do cliente", "ia-contexto|%s" % cid, False),
+        "/api/ia/gerar": ("gerando o resumo com a IA", "ia-gerar|%s" % cid, False),
+        "/api/ia/editar": ("editando o resumo do cliente", "ia-editar|%s" % cid, False),
         "/api/tratamento/retratar-mes": ("pediu para retratar o mês todo", "retratar-mes", True),
         "/api/consolidado/gerar": ("gerando pacote final", "pacote|%s" % cid, True),
         "/api/forecast/definir": ("definindo forecast", "forecast|%s" % cid, False),
@@ -125,6 +128,9 @@ def descrever(caminho, dados, cfg):
         "/api/acompanhamento/ficha": "atualizou a ficha de acompanhamento",
         "/api/acompanhamento/visao": "atualizou o direcionamento geral",
         "/api/acompanhamento/importar": "importou registros de acompanhamento",
+        "/api/ia/contexto": "atualizou o contexto do cliente (Resumo IA)",
+        "/api/ia/gerar": "gerou o resumo do cliente com a IA",
+        "/api/ia/editar": "editou o resumo do cliente",
         "/api/tratamento/retratar-mes": "pediu para retratar o mês todo",
         "/api/consolidado/gerar": "gerou o pacote final",
         "/api/forecast/definir": "definiu o forecast",

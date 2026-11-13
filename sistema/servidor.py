@@ -2229,6 +2229,43 @@ def acomp_resumo(dados):
     return dict(r, ok=True)
 
 
+def _ia_mod():
+    import resumo_ia
+    return resumo_ia
+
+
+def _ia_chamar(fn):
+    try:
+        return dict(fn(), ok=True)
+    except ValueError as e:
+        return {"ok": False, "erro": str(e)}
+
+
+def ia_estado(dados):
+    m = _mes_valido(dados.get("mes")) or "%04d-%02d" % _consolidado().mes_atual()
+    return _ia_chamar(lambda: dict(_ia_mod().estado(comum.carregar_config(), dados.get("cliente_id") or "", m), mes=m))
+
+
+def ia_contexto(dados):
+    return _ia_chamar(lambda: {"contexto": _ia_mod().salvar_contexto(comum.carregar_config(), dados.get("cliente_id") or "",
+                                                                        dados.get("texto"), dados.get("_por") or "")})
+
+
+def ia_gerar(dados):
+    m = _mes_valido(dados.get("mes")) or "%04d-%02d" % _consolidado().mes_atual()
+    return _ia_chamar(lambda: {"resumo": _ia_mod().gerar(comum.carregar_config(), dados.get("cliente_id") or "", m,
+                                                          dados.get("_por") or "")})
+
+
+def ia_editar(dados):
+    return _ia_chamar(lambda: {"resumo": _ia_mod().salvar_edicao(comum.carregar_config(), dados.get("cliente_id") or "",
+                                                                  dados.get("id") or "", dados.get("texto"), dados.get("_por") or "")})
+
+
+ACOES["/api/ia/estado"] = ia_estado
+ACOES["/api/ia/contexto"] = ia_contexto
+ACOES["/api/ia/gerar"] = ia_gerar
+ACOES["/api/ia/editar"] = ia_editar
 ACOES["/api/acompanhamento/listar"] = acomp_listar
 ACOES["/api/acompanhamento/resumo"] = acomp_resumo
 ACOES["/api/acompanhamento/salvar"] = acomp_salvar
