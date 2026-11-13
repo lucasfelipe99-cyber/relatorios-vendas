@@ -394,6 +394,9 @@ def resumo(cfg, cliente, ano, mes, hoje=None, filtro=None):
     saida["top_produtos"] = [linha(s, r) for s, r in top.iterrows()]
     saida["piores_margens"] = [linha(s, r) for s, r in pior.iterrows() if r["margem"] < 0]
     saida["skus_vendidos"] = int(len(porsku))
+    pos = porsku[porsku["margem"] > 0]
+    saida["melhores_margens"] = [linha(s_, r) for s_, r in pos.sort_values("margem", ascending=False).head(8).iterrows()]
+    saida["mais_unidades"] = [linha(s_, r) for s_, r in porsku.sort_values("unidades", ascending=False).head(8).iterrows()]
 
     # alertas sobre os dados (o que pode distorcer os números)
     alertas = []

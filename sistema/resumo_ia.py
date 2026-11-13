@@ -127,7 +127,9 @@ def montar_dados(cfg, cliente_id, mes):
             vendas["por_canal_e_conta"] = [dict(_totais(g), marketplace=g.get("marketplace"), conta=g.get("conta"))
                                            for g in (r.get("por_canal") or [])[:15]]
             vendas["produtos_que_mais_faturam"] = (r.get("top_produtos") or [])[:8]
-            vendas["produtos_com_margem_negativa"] = (r.get("piores_margens") or [])[:6]
+            vendas["produtos_com_maior_gm_em_reais"] = (r.get("melhores_margens") or [])[:8]
+            vendas["produtos_com_mais_unidades_vendidas"] = (r.get("mais_unidades") or [])[:8]
+            vendas["produtos_com_margem_negativa"] = (r.get("piores_margens") or [])[:8]
             vendas["skus_vendidos"] = r.get("skus_vendidos")
             vendas["alertas_do_painel"] = [{"titulo": a.get("titulo"), "detalhe": a.get("detalhe")} for a in (r.get("alertas") or [])[:10]]
     except Exception as e:
@@ -150,23 +152,36 @@ Regras:
 - O contexto escrito pela equipe é a fonte mais importante para explicar o momento do cliente: use-o.
 - Seja objetivo: frases curtas, sem floreio, sem repetir a mesma informação."""
 
-PEDIDO = """Escreva o resumo do cliente {cliente} referente a {mes} (hoje é {hoje}), com estas seções em Markdown:
+PEDIDO = """Faça um RESUMO EXECUTIVO da empresa {cliente} referente a {mes} (hoje é {hoje}), para o dono ou gestor ler em 2 minutos. \
+Use estas seções em Markdown, nesta ordem, com listas curtas e números:
 
-## Situação geral
-2 a 4 frases: momento do cliente, o que está sendo feito e o resultado do mês até agora.
+## Principais pontos
+3 a 5 frases curtas com o essencial: como está o mês e o que mais importa agora.
 
-## Vendas e rentabilidade
-Faturamento, GM e GM%, publicidade (TACOS), unidades e cancelamento, comparando com o mês anterior e o forecast. \
-Destaque canais/contas e produtos que puxam o resultado para cima ou para baixo (inclusive margem negativa).
+## Como está indo
+Faturamento, GM e GM%, unidades e cancelamento, comparando com o mês anterior até o mesmo dia e com o forecast (se houver). \
+Diga claramente se está melhor ou pior e quanto.
 
-## O que foi feito no mês
-Lista curta das atividades realizadas e o efeito delas, quando der para ligar aos números.
+## Maior volume
+Canais/contas e produtos que mais vendem (faturamento e unidades), com o GM% de cada um.
 
-## Em aberto e próximos passos
-Lista do que está programado, com prazo e responsável; vencidos e pontos de atenção primeiro.
+## Maiores margens
+Produtos (e canais) que mais deixam margem (GM em R$ e GM%): onde vale a pena colocar mais força.
 
-## Pontos de atenção e recomendações
-Até 5 itens objetivos, ligados aos dados.
+## Piores margens
+Produtos e canais com GM baixo ou negativo, quanto estão tirando do resultado e a causa provável quando os dados mostrarem \
+(publicidade alta, custo, cancelamento).
+
+## Investimento
+Publicidade do mês: valor, TACOS e ROAS, por canal quando houver; onde o investimento está trazendo resultado e onde não está.
+
+## Onde está ruim
+Lista objetiva dos problemas: margens negativas, TACOS alto, queda contra o mês anterior, cancelamento, pendências vencidas, \
+alertas do painel e o que o contexto da equipe apontar.
+
+## O que fazer agora
+Até 5 ações práticas, em ordem de impacto, ligadas aos pontos acima; inclua o que já está programado nas atividades em aberto \
+(com prazo e responsável) e o que foi realizado no mês, quando ajudar a explicar.
 
 Dados (JSON):
 {dados}"""
@@ -176,7 +191,7 @@ def gerar(cfg, cliente_id, mes, por):
     if not configurada():
         raise ValueError("A IA não está configurada: falta a chave ANTHROPIC_API_KEY nas variáveis do Render (Environment).")
     dados = montar_dados(cfg, cliente_id, mes)
-    corpo = {"model": modelo(), "max_tokens": 3000, "system": SISTEMA,
+    corpo = {"model": modelo(), "max_tokens": 4000, "system": SISTEMA,
              "messages": [{"role": "user", "content": PEDIDO.format(
                  cliente=dados["cliente"], mes=dados["mes"], hoje=dados["hoje"],
                  dados=json.dumps(dados, ensure_ascii=False, indent=1, default=str))}]}
