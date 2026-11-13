@@ -932,7 +932,7 @@ def ler_depara(mk, caminho):
             and (v.isdigit() if mk == "tiktokshop" else not v.lower().startswith(("obrigat", "opcional", "naoedit", "v4")))
     else:
         raise ValueError("Marketplace sem de-para.")
-    melhor = {}
+    melhor, todas = {}, {}
     for _, linhas in _linhas(caminho):
         for n, cab in enumerate(linhas[:15]):
             ks = [_chave(c) for c in cab]
@@ -969,9 +969,21 @@ def ler_depara(mk, caminho):
                 if (tem_var or mk not in DEPARA_ADS_POR_PLANILHA) and len(d["sku"]) > 1:
                     d["variacoes"] = True
                 d["sku"] = ", ".join(d["sku"])
-            if len(saida) > len(melhor) or (len(saida) == len(melhor) and saida and jn is not None):
+            if mk not in DEPARA_ADS_POR_PLANILHA:
+                # demais canais (ex.: fichas técnicas do ML): uma aba por categoria — junta todas
+                for k, v in saida.items():
+                    if k in todas:
+                        skus = skus_lista(todas[k]["sku"]) + [x for x in skus_lista(v["sku"]) if x not in skus_lista(todas[k]["sku"])]
+                        todas[k]["sku"] = ", ".join(skus)
+                        if len(skus) > 1:
+                            todas[k]["variacoes"] = True
+                    else:
+                        todas[k] = v
+            elif len(saida) > len(melhor) or (len(saida) == len(melhor) and saida and jn is not None):
                 melhor = saida
             break
+    if todas:
+        return todas
     if melhor:
         return melhor
     d = DEPARA[mk]
