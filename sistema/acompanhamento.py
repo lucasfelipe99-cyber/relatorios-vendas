@@ -132,6 +132,69 @@ def contagem(cfg):
     return res
 
 
+def _vendas_mes(cfg, c, ano, mes):
+    """Números de venda do mês do cliente (pacote final), com o mês anterior até o mesmo dia e o forecast."""
+    import painel_dados
+    r = painel_dados.resumo(cfg, c, ano, mes)
+    if not r.get("ok") or r.get("sem_dados") or not r.get("total"):
+        return {"sem_dados": True, "mes": "%04d-%02d" % (ano, mes), "erro": r.get("erro")}
+    campos = ("fat_bruto", "fat_liquido", "margem", "margem_pct", "publicidade", "tacos", "roas", "unidades", "cancel_pct",
+              "afiliados", "ticket_un")
+    t = {k: r["total"].get(k) for k in campos}
+    ant = (r.get("anterior") or {}).get("total") or {}
+    fc = ((r.get("forecast") or {}).get("ate") or {})
+    return {"mes": r.get("mes"), "ate": r.get("ate") or (r.get("opcoes") or {}).get("ate"),
+            "gerado": (r.get("consolidado") or {}).get("gerado"), "total": t,
+            "anterior": {k: ant.get(k) for k in campos} if ant else None,
+            "anterior_mes": (r.get("anterior") or {}).get("mes"), "anterior_ate_dia": (r.get("anterior") or {}).get("ate_dia"),
+            "forecast_fat": fc.get("fat_bruto") if fc else None, "forecast_margem": fc.get("margem") if fc else None}
+
+
+def resumo_clientes(cfg, cliente_id="", limite=8, mes_txt=""):
+    """Por cliente: números de venda do mês e as atividades em aberto e realizadas no mês."""
+    import consolidado
+    hoje = dt.date.today()
+    ano, mes = consolidado.mes_atual(hoje)
+    try:
+        if mes_txt:
+            ano, mes = int(mes_txt[:4]), int(mes_txt[5:7])
+    except ValueError:
+        pass
+    fim = "%04d-%02d-01" % ((ano + 1, 1) if mes == 12 else (ano, mes + 1))
+    ini = "%04d-%02d-01" % (ano, mes)
+    hj = hoje.isoformat()
+    nomes = _clientes(cfg)
+    out = []
+    for cid in ([cliente_id] if cliente_id else _ordem_cliente(cfg)):
+        if cid not in nomes:
+            continue
+        c = next((x for x in cfg["clientes"] if x["id"] == cid), None)
+        d = _ler_tudo(cid)
+        its = d["itens"]
+        pend = [i for i in its if i.get("situacao") != "resolvido"]
+        # em aberto: pontos de atenção e prazos vencidos primeiro, depois pelo prazo
+        pend.sort(key=lambda i: (0 if (i.get("prazo") and i["prazo"] < hj) else 1, 0 if i.get("tipo") == "Ponto de atenção" else 1,
+                                 i.get("prazo") or "9999", i.get("data") or ""))
+        quando = lambda i: (i.get("resolvido_em") or "")[:10] or i.get("data") or ""
+        feitos = [i for i in its if i.get("situacao") == "resolvido" and ini <= quando(i) < fim]
+        feitos.sort(key=lambda i: ((i.get("resolvido_em") or "")[:10] or i.get("data") or ""), reverse=True)
+        enx = lambda i: {k: i.get(k) for k in ("id", "data", "tipo", "assunto", "situacao", "prazo", "responsavel", "canal", "resolvido_em")}
+        try:
+            vendas = _vendas_mes(cfg, c, ano, mes) if c else {"sem_dados": True}
+        except Exception as e:
+            comum.log("acompanhamento: resumo de vendas de %s não calculado: %s" % (cid, e))
+            vendas = {"sem_dados": True, "erro": str(e)[:200]}
+        out.append({"cliente_id": cid, "cliente": nomes[cid], "status": d["ficha"].get("status", ""), "nivel": d["ficha"].get("nivel", ""),
+                    "vendas": vendas,
+                    "abertos": len(pend), "andamento": sum(1 for i in pend if i.get("situacao") == "andamento"),
+                    "vencidos": sum(1 for i in pend if i.get("prazo") and i["prazo"] < hj),
+                    "atencao": sum(1 for i in pend if i.get("tipo") == "Ponto de atenção"),
+                    "realizados_mes": len(feitos), "realizados": len(its) - len(pend),
+                    "lista_abertos": [enx(i) for i in pend[:limite]], "lista_feitos": [enx(i) for i in feitos[:limite]],
+                    "ultimo": max((i["data"] for i in its), default="")})
+    return {"mes": "%04d-%02d" % (ano, mes), "clientes": out}
+
+
 def visao_geral():
     try:
         with open(ARQ_GERAL, "r", encoding="utf-8") as f:

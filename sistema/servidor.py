@@ -2223,7 +2223,14 @@ ACOES["/api/tratamento/retratar-mes"] = acao_retratar_mes
 ACOES["/api/acompanhamento/ficha"] = acomp_ficha
 ACOES["/api/acompanhamento/visao"] = acomp_visao
 ACOES["/api/acompanhamento/importar"] = acomp_importar
+def acomp_resumo(dados):
+    r = _acomp().resumo_clientes(comum.carregar_config(), dados.get("cliente_id") or "",
+                                 mes_txt=_mes_valido(dados.get("mes")) or "")
+    return dict(r, ok=True)
+
+
 ACOES["/api/acompanhamento/listar"] = acomp_listar
+ACOES["/api/acompanhamento/resumo"] = acomp_resumo
 ACOES["/api/acompanhamento/salvar"] = acomp_salvar
 ACOES["/api/acompanhamento/remover"] = acomp_remover
 

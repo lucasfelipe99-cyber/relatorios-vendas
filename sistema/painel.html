@@ -278,6 +278,22 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
 .ac-meta{font-size:11.5px;color:var(--mut);margin-top:5px}
 .ac-meta .venc{color:var(--err);font-weight:700}
 .ac-ac{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.ac-resg{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px;margin-bottom:16px}
+.ac-resg.um{grid-template-columns:1fr}
+.ac-res{background:var(--bg);border:1px solid var(--li);border-radius:10px;padding:12px 14px;display:grid;gap:10px;align-content:start}
+.ac-res a{color:var(--tx);text-decoration:none}.ac-res a:hover b{color:var(--pri)}
+.ac-rh{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.ac-res .lb{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin-bottom:2px}
+.ac-kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;border-top:1px solid var(--li);border-bottom:1px solid var(--li);padding:9px 0}
+.ac-kpi b{font-size:15px;font-variant-numeric:tabular-nums}
+.ac-var{font-size:11.5px;font-weight:700;margin-left:6px}.ac-var.up{color:var(--ok)}.ac-var.dn{color:var(--err)}
+.ac-rat{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.ac-rat ul{list-style:none;margin:0;padding:0;display:grid;gap:5px;font-size:12.5px}
+.ac-rat li{display:flex;gap:6px;align-items:baseline;line-height:1.35}
+.ac-rt{flex:none;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;background:var(--card);border:1px solid var(--li);color:var(--mut);white-space:nowrap}
+.ac-rt.ok{color:var(--ok);background:var(--okbg);border-color:transparent}.ac-rt.err{color:var(--err);background:var(--errbg);border-color:transparent}.ac-rt.war{color:var(--war);background:var(--warbg);border-color:transparent}
+.ac-ra.at{color:var(--war);font-weight:600}
+@media (max-width:640px){.ac-resg{grid-template-columns:1fr}.ac-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-rat{grid-template-columns:1fr}}
 .ac-cli{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-bottom:16px}
 .ac-cli a{display:block;text-decoration:none;color:var(--tx);background:var(--bg);border:1px solid var(--li);border-radius:10px;padding:11px 13px}
 .ac-cli a:hover{border-color:var(--pri)}
@@ -546,6 +562,7 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
       <button class="b" onclick="acLimpar()">Limpar filtros</button>
     </div>
     <div id="ac-topo"></div>
+    <div id="ac-resumo"></div>
     <div id="ac-lista"><div class="mut small">Carregando…</div></div>
     <div id="ac-geral"></div>
   </div>
@@ -1228,6 +1245,7 @@ function acBlocos(L,todos){const idx=it=>L.indexOf(it);
   const bl=(tit,cor,lst,vz)=>`<div class="ac-bl"><h3><i style="background:${cor}"></i>${tit} <span class="mut" style="font-weight:500">${lst.length}</span></h3>${lst.length?lst.map(x=>acItem(x,idx(x),todos)).join(""):`<div class="ac-vazio">${vz}</div>`}</div>`;
   return `<div class="ac-col">${bl("Pontos de atenção","var(--err)",atencao,"Nenhum ponto de atenção em aberto.")}${bl("Programado","var(--pri)",fazer,"Nada programado.")}${bl("Realizado","var(--ok)",feito,"Nada realizado ainda.")}</div>`}
 async function rAcomp(){if(!E)return;const f=acFiltro(),cid=f.cliente_id,c=E.config.clientes.find(x=>x.id===cid);
+  if(window._acResCli!==cid+mesTela()){window._acResCli=cid+mesTela();$("#ac-resumo").innerHTML=""}acResumo(cid);
   $("#ac-tit").textContent="Acompanhamento — "+(c?c.nome:"todos os clientes");$("#ac-imp").hidden=!(E.eu||{}).admin;
   const r=await post("/api/acompanhamento/listar",f);if(!r.ok){$("#ac-lista").innerHTML=`<div class="erro">${esc(r.erro||"erro")}</div>`;return}
   AC=r;acNav(r.contagem);window._acL=r.itens;const L=r.itens;
@@ -1241,14 +1259,44 @@ async function rAcomp(){if(!E)return;const f=acFiltro(),cid=f.cliente_id,c=E.con
       ${fi.objetivo?`<div class="lb">Objetivo</div><div class="tx">${esc(fi.objetivo)}</div>`:""}
       ${fi.atualizado_por?`<div class="small mut" style="margin-top:10px">Ficha atualizada por ${esc(fi.atualizado_por)} em ${acBR((fi.atualizado_em||"").slice(0,10))}</div>`:""}</div>`;
     $("#ac-geral").innerHTML=""}
-  else{const C=E.config.clientes.filter(x=>x.ativo!==false);
-    $("#ac-topo").innerHTML=`<div class="ac-cli">${C.map(x=>{const k=r.contagem[x.id]||{};return `<a href="#" onclick='selCliente(${JSON.stringify(x.id)});return false'><b>${esc(x.nome)}${acNiv(k.nivel)}</b><span class="s">${esc(k.status||"")||'<span class="mut">sem ficha</span>'}</span>
-      <span class="small mut">${k.atencao?`<span style="color:var(--err);font-weight:700">${k.atencao} atenção</span> · `:""}${k.abertos-(k.atencao||0)} programado(s) · ${k.realizados||0} realizado(s)${k.vencidos?` · <span style="color:var(--err);font-weight:700">${k.vencidos} vencido(s)</span>`:""}</span></a>`}).join("")}</div>`;
+  else{const C=[];
+    $("#ac-topo").innerHTML=C.length?`<div class="ac-cli">${C.map(x=>{const k=r.contagem[x.id]||{};return `<a href="#" onclick='selCliente(${JSON.stringify(x.id)});return false'><b>${esc(x.nome)}${acNiv(k.nivel)}</b><span class="s">${esc(k.status||"")||'<span class="mut">sem ficha</span>'}</span>
+      <span class="small mut">${k.atencao?`<span style="color:var(--err);font-weight:700">${k.atencao} atenção</span> · `:""}${k.abertos-(k.atencao||0)} programado(s) · ${k.realizados||0} realizado(s)${k.vencidos?` · <span style="color:var(--err);font-weight:700">${k.vencidos} vencido(s)</span>`:""}</span></a>`}).join("")}</div>`:"";
     const vg=r.visao_geral||{};
     $("#ac-geral").innerHTML=`<div class="ac-geral"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0;font-size:14px">Direcionamento geral</h3><button class="b" onclick="acVisao()">${vg.texto?"Editar":"Escrever"}</button></div>
       ${vg.texto?`<div class="ac-tx" style="margin-top:8px">${esc(vg.texto)}</div><div class="small mut" style="margin-top:8px">Atualizado por ${esc(vg.atualizado_por||"?")} em ${acBR((vg.atualizado_em||"").slice(0,10))}</div>`:'<div class="small mut" style="margin-top:6px">O direcionamento das próximas semanas para todos os clientes. Entra no fim do PDF.</div>'}</div>`}
   if(!L.length){$("#ac-lista").innerHTML=`<div class="ac-vazio" style="text-align:center;padding:22px">${r.contagem&&Object.values(r.contagem).some(x=>x.total)&&(f.de||f.ate||f.tipo||f.situacao||f.busca)?"Nada com esses filtros.":"Nenhum registro ainda"+(c?` para ${esc(c.nome)}`:"")+". Clique em <b>+ Novo registro</b>."}</div>`;return}
   $("#ac-lista").innerHTML=acBlocos(L,!c)}
+// ---------------------------------------------------------------- resumo por cliente (vendas do mês + atividades)
+const acR$=v=>v==null?"—":"R$ "+(Math.round(v)||0).toLocaleString("pt-BR"),acPc=v=>v==null?"—":(v*100).toLocaleString("pt-BR",{maximumFractionDigits:1})+"%";
+function acVar(a,b){if(a==null||!b||a===b)return"";const v=(a-b)/Math.abs(b),up=v>=0;return `<span class="ac-var ${up?"up":"dn"}" title="Contra o mês anterior até o mesmo dia">${up?"▲":"▼"} ${Math.abs(v*100).toLocaleString("pt-BR",{maximumFractionDigits:1})}%</span>`}
+function acResItem(i,feito){const hj=acHoje(),venc=!feito&&i.prazo&&i.prazo<hj;
+  const tag=feito?`<span class="ac-rt ok">${acBR(((i.resolvido_em||"").slice(0,10))||i.data).slice(0,5)}</span>`
+    :venc?`<span class="ac-rt err">venceu ${acBR(i.prazo).slice(0,5)}</span>`:i.prazo?`<span class="ac-rt">até ${acBR(i.prazo).slice(0,5)}</span>`
+    :i.situacao==="andamento"?`<span class="ac-rt war">em andamento</span>`:`<span class="ac-rt">${acBR(i.data).slice(0,5)}</span>`;
+  return `<li>${tag}<span><span class="ac-ra${i.tipo==="Ponto de atenção"&&!feito?" at":""}">${esc(i.assunto)}</span>${i.responsavel?`<span class="mut"> · ${esc(i.responsavel)}</span>`:""}</span></li>`}
+function acResCard(x,um){const v=x.vendas||{},t=v.total||{},a=v.anterior||{};
+  const mesTx=v.mes?`${v.mes.slice(5)}/${v.mes.slice(0,4)}${v.ate?" · até "+acBR(v.ate).slice(0,5):""}`:"";
+  const kpi=v.sem_dados?`<div class="small mut" style="padding:8px 0">Sem pacote final do mês ainda${v.erro?" ("+esc(v.erro)+")":""}.</div>`
+    :`<div class="ac-kpi"><div><div class="lb">Faturamento bruto</div><b>${acR$(t.fat_bruto)}</b>${acVar(t.fat_bruto,a.fat_bruto)}${v.forecast_fat?`<div class="small mut">forecast ${acR$(v.forecast_fat)} (${acPc(t.fat_bruto/v.forecast_fat)})</div>`:""}</div>
+      <div><div class="lb">GM</div><b style="color:${(t.margem||0)<0?"var(--err)":"var(--ok)"}">${acR$(t.margem)}</b>${acVar(t.margem,a.margem)}<div class="small mut">GM% ${acPc(t.margem_pct)}${a.margem_pct!=null?` (ant. ${acPc(a.margem_pct)})`:""}</div></div>
+      <div><div class="lb">Publicidade</div><b>${acR$(Math.abs(t.publicidade||0))}</b><div class="small mut">TACOS ${acPc(t.tacos)}${t.roas?` · ROAS ${t.roas.toLocaleString("pt-BR")}`:""}</div></div>
+      <div><div class="lb">Unidades</div><b>${(t.unidades||0).toLocaleString("pt-BR")}</b>${acVar(t.unidades,a.unidades)}<div class="small mut">cancel. ${acPc(t.cancel_pct)}</div></div></div>`;
+  const n=um?8:4;
+  return `<div class="ac-res">
+    <div class="ac-rh"><div>${um?`<b style="font-size:15px">Resumo do mês</b>`:`<a href="#" onclick='selCliente(${JSON.stringify(x.cliente_id)});return false'><b style="font-size:15px">${esc(x.cliente)}</b></a>${acNiv(x.nivel)}
+      ${x.status?`<div class="small mut" style="margin-top:2px">${esc(x.status)}</div>`:""}`}</div><span class="small mut">${esc(mesTx)}</span></div>
+    ${kpi}
+    <div class="ac-rat"><div><div class="lb">Em aberto (${x.abertos})${x.vencidos?` <span style="color:var(--err)">· ${x.vencidos} vencido(s)</span>`:""}${x.atencao?` <span style="color:var(--war)">· ${x.atencao} atenção</span>`:""}</div>
+        ${x.lista_abertos.length?`<ul>${x.lista_abertos.slice(0,n).map(i=>acResItem(i,false)).join("")}</ul>${x.abertos>n?`<div class="small mut">+ ${x.abertos-n} …</div>`:""}`:'<div class="small mut">Nada em aberto.</div>'}</div>
+      <div><div class="lb">Realizadas no mês (${x.realizados_mes})</div>
+        ${x.lista_feitos.length?`<ul>${x.lista_feitos.slice(0,n).map(i=>acResItem(i,true)).join("")}</ul>${x.realizados_mes>n?`<div class="small mut">+ ${x.realizados_mes-n} …</div>`:""}`:'<div class="small mut">Nenhuma atividade realizada no mês.</div>'}</div></div></div>`}
+let AC_RES_T=0;
+async function acResumo(cid){const el=$("#ac-resumo"),t=++AC_RES_T;if(!el)return;
+  if(!el.innerHTML)el.innerHTML='<div class="small mut" style="margin-bottom:12px">Carregando o resumo dos clientes…</div>';
+  const r=await post("/api/acompanhamento/resumo",{cliente_id:cid||"",mes:mesTela()});if(t!==AC_RES_T)return;
+  if(!r.ok){el.innerHTML=`<div class="erro">${esc(r.erro||"erro no resumo")}</div>`;return}
+  el.innerHTML=`<div class="ac-resg${cid?" um":""}">${r.clientes.map(x=>acResCard(x,!!cid)).join("")}</div>`}
 window.rAcomp=rAcomp;
 window.acSituacao=async(i,sit)=>{const it=window._acL[i];const r=await post("/api/acompanhamento/salvar",{...it,situacao:sit});toast(r.ok?"Agora: "+AC_SIT[sit][1]:r.erro);rAcomp()};
 window.acResolver=i=>acSituacao(i,"resolvido");
