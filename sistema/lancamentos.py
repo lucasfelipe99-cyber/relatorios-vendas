@@ -928,7 +928,8 @@ def ler_depara(mk, caminho):
                                  "parentsku", "skudoanuncio", "skudoproduto", "codigodoseller", "referencia")
         var_col = lambda k: k in ("skudavariacao", "skudavariante", "variationsku", "skuvariacao", "sellerskudavariacao")
         ok_nome = lambda k: k.startswith("titulo") or k.startswith("nomedoproduto") or k in ("itemname", "productname", "title", "nome")
-        id_valido = lambda v: bool(v) and " " not in v and len(v) <= 60 and not v.lower().startswith(("exemplo", "example"))
+        id_valido = lambda v: bool(v) and " " not in v and len(v) <= 60 and not v.lower().startswith(("exemplo", "example")) \
+            and (v.isdigit() if mk == "tiktokshop" else not v.lower().startswith(("obrigat", "opcional", "naoedit", "v4")))
     else:
         raise ValueError("Marketplace sem de-para.")
     melhor = {}

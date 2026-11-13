@@ -176,6 +176,17 @@ def _linhas_da_planilha(caminho):
         # do openpyxl enxerga só a 1ª coluna. Nesse caso relê com o calamine.
         if abas and all(max((len(r) for r in linhas), default=0) <= 1 for _, linhas in abas) and os.path.getsize(caminho) > 3000:
             raise ValueError("só uma coluna lida")
+        if sum(len(l) for _, l in abas) < 60 and os.path.getsize(caminho) > 15000:
+            # dimensão da aba gravada errada (ex.: modelo de edição em massa do TikTok): o modo rápido do openpyxl
+            # para nas primeiras linhas. Se o calamine enxergar mais linhas, vale o calamine.
+            try:
+                from python_calamine import CalamineWorkbook
+                wbc = CalamineWorkbook.from_path(caminho)
+                abas_c = [(n, [list(r) for r in wbc.get_sheet_by_name(n).to_python()]) for n in wbc.sheet_names]
+                if sum(len(l) for _, l in abas_c) > sum(len(l) for _, l in abas):
+                    return abas_c
+            except Exception:
+                pass
         return abas
     except Exception:
         # planilhas que o openpyxl não abre (ex.: mass_update da Shopee): lê com o calamine
