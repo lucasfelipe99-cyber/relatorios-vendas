@@ -43,11 +43,8 @@ def _ler_receber(caminho):
     return df
 
 def _normalizar_sku(valor):
+    # SKU como vem da plataforma: não corta no "-"
     sku="" if pd.isna(valor) else str(valor).strip()
-    if sku.startswith("FBA"):
-        sku=sku.split("-",1)[1] if "-" in sku else sku
-    else: sku=sku.split("-",1)[0]
-    sku=sku.split("-",1)[0]
     return {"4F":"GA1147","1222":"GA1222","8V":"GA1266","57":"GA1209","87":"GA1222"}.get(sku,sku)
 
 def _preparar_unificado(df):

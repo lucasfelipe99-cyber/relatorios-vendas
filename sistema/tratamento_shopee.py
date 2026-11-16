@@ -161,10 +161,10 @@ def transformar_shopee(pedidos: pd.DataFrame, custos: pd.DataFrame, ids: pd.Data
             df["ID do Produto"].notna(), df["_sku_completo"]
         )
     df["Imposto"] = float(aliquota_imposto) * -(df["Faturamento"] + df["Desconto"])
-    df["Número de referência SKU"] = df["_sku_completo"].str.split("-").str[0]
+    df["Número de referência SKU"] = df["_sku_completo"]   # SKU como vem da plataforma (com "-" e o que vem depois)
     sem_sku = df["_sku_completo"].eq("")
     df.loc[sem_sku, "ID do Produto"] = df.loc[sem_sku, "_sku_nome"]
-    df.loc[sem_sku, "Número de referência SKU"] = df.loc[sem_sku, "_sku_nome"]   # o nome pode ter "-": não corta
+    df.loc[sem_sku, "Número de referência SKU"] = df.loc[sem_sku, "_sku_nome"]
     custo = custos[["SKU", "Valor total"]].copy()
     custo["SKU"] = custo["SKU"].map(_texto)
     df = df.merge(custo, left_on="Número de referência SKU", right_on="SKU",

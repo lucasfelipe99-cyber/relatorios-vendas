@@ -279,12 +279,12 @@ def _repartir(df, nome, loja, sku, cache, dia=None):
 
 
 def _skus_como_vendas_shopee(sku):
-    """Os SKUs das variações no de-para, do jeito que a venda da Shopee guarda o SKU (cortado no primeiro "-")."""
+    """Os SKUs das variações no de-para, do jeito que a venda da Shopee guarda o SKU (inteiro, como vem da plataforma)."""
     import lancamentos
     vistos = []
     for x in lancamentos.skus_lista(sku):
-        x = x.split("-")[0].strip() or x
-        if x not in vistos:
+        x = x.strip()
+        if x and x not in vistos:
             vistos.append(x)
     return ", ".join(vistos)
 

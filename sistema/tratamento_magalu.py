@@ -97,15 +97,8 @@ def _ler_zip(caminho: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def _normalizar_sku(valor: Any) -> str:
-    texto = "" if pd.isna(valor) else str(valor).strip()
-    if texto.startswith("GA"):
-        base = texto.split("-", 1)[0]
-        if base.endswith("VA"):
-            base = base[:-2]
-        elif base.endswith("V"):
-            base = base[:-1]
-        return base
-    return texto
+    # SKU como vem da plataforma: não corta no "-" (nem tira sufixo)
+    return "" if pd.isna(valor) else str(valor).strip()
 
 
 def transformar_magalu(
