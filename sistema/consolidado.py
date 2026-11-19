@@ -822,7 +822,13 @@ def _gerar(cfg, cliente, ano=None, mes=None, hoje=None, origem="manual"):
         res["lancamentos"] = lanc["resumo"]
         df = df.drop(columns=["Pedido"])
         chave = ["Marketplace", "Marketplace venda", "SKU", "Id anúncio", "Data", "Categoria", "Sub Categoria", "Type"]
-        df = df.groupby(chave, as_index=False, sort=False)["Valor completo"].sum()
+        auditoria = None
+        if cliente.get("sem_sku"):
+            # cliente sem SKU nas plataformas: todo ADS/afiliado/visita é ligado a um produto vendido da conta
+            df, auditoria = _vinculo_forcado(cfg, cliente, df, desc)
+            chave += ["Id_anuncio_original", "Id_anuncio_normalizado", "Metodo_vinculo", "Fator_rateio"]
+            res["vinculo"] = _resumo_vinculo(auditoria)
+        df = df.groupby(chave, as_index=False, sort=False, dropna=False)["Valor completo"].sum()
         df = df[df["Valor completo"].round(6) != 0]
         df["Datatype"] = "Actual"
         # forecast definido do mês (travado): entra na mesma base com Datatype "Forecast"
@@ -837,6 +843,11 @@ def _gerar(cfg, cliente, ano=None, mes=None, hoje=None, origem="manual"):
             dff["Data"] = pd.to_datetime(dff["Data"])
             dff["Id anúncio"], dff["Type"], dff["Datatype"] = "", "Organico", "Forecast"
             dff["Marketplace venda"] = cliente["nome"]
+            for c in ("Id_anuncio_original", "Id_anuncio_normalizado", "Metodo_vinculo"):
+                if c in df.columns:
+                    dff[c] = ""
+            if "Fator_rateio" in df.columns:
+                dff["Fator_rateio"] = 1.0
             df = pd.concat([df, dff[df.columns]], ignore_index=True)
         res["forecast_linhas"] = len(fc)
         ordem = {cs: i for i, cs in enumerate([cs for _, cs in METRICAS] + [AFI, PUB, CLQ, ADF, VIS, QVV])}
@@ -850,7 +861,7 @@ def _gerar(cfg, cliente, ano=None, mes=None, hoje=None, origem="manual"):
         res["sem_descricao"] = len(sem_desc)
         res["exemplos_sem_descricao"] = sem_desc[:8]
         destino = os.path.join(comum.raiz(cfg), comum.rotulo_dia(hoje), cliente["nome"], nome_arquivo(cliente, ano, mes))
-        _gravar(df, cliente, desc, destino, hoje)
+        _gravar(df, cliente, desc, destino, hoje, auditoria=auditoria)
 
         # conferência: relê o arquivo gravado e compara com os totais tirados direto dos tratados
         lido = ler_excel(destino, sheet_name="DB")
@@ -1110,12 +1121,43 @@ def _gerar_de_pronto(cfg, cliente, ano, mes, hoje, res):
         return _registrar(res)
 
 
-def _gravar(df, cliente, desc, destino, hoje):
+def _vinculo_forcado(cfg, cliente, df, desc):
+    """Cliente com a flag sem_sku: vínculo forçado por conta (vinculo.py). Devolve (df, auditoria)."""
+    import lancamentos
+    import vinculo
+    depara = {}
+    for u in comum.contas_do_cliente(cfg, cliente):
+        d = lancamentos.dono(u)
+        for mk in u.get("marketplaces") or []:
+            if lancamentos.tem_depara(mk):
+                try:
+                    dp = lancamentos.carregar_depara(cfg, d, mk)
+                except Exception:
+                    dp = {}
+                if dp:
+                    depara[(_nome_mk(cfg, mk), d["loja"])] = dp
+    for c in ("SKU", "Id anúncio"):
+        df[c] = df[c].map(lambda v: "" if v is None or (isinstance(v, float) and v != v) else str(v))
+    return vinculo.forcar(df, desc, {AFI, PUB, CLQ, ADF, VIS, QVV}, depara, {CLQ, VIS, QVV}, AFI)
+
+
+def _resumo_vinculo(aud):
+    """Por marketplace: valor e % de cada método de vínculo (para a tela)."""
+    out = {}
+    if aud is None or not len(aud):
+        return out
+    for (mk, met), v in aud.groupby(["Marketplace", "Metodo_vinculo"])["Valor"].sum().items():
+        out.setdefault(mk, {})[met] = round(float(v), 2)
+    return out
+
+
+def _gravar(df, cliente, desc, destino, hoje, auditoria=None):
     """Grava o arquivo (xlsxwriter, bem mais rápido; sem ele, openpyxl). Pode ter dezenas de milhares de linhas."""
     try:
         import xlsxwriter  # noqa: F401
     except ImportError:
         return _gravar_openpyxl(df, cliente, desc, destino, hoje)
+    extras = [c for c in ("Id_anuncio_original", "Id_anuncio_normalizado", "Metodo_vinculo", "Fator_rateio") if c in df.columns]
     import xlsxwriter
     os.makedirs(os.path.dirname(destino), exist_ok=True)
     tmp = destino + ".novo.xlsx"
@@ -1127,14 +1169,16 @@ def _gravar(df, cliente, desc, destino, hoje):
     for j, larg in enumerate((14, 22, 16, 20, 11, 24, 24, 14, 10, 40, 18, 9, 11, 13, 12)):
         ws.set_column(j, j, larg)
     ws.freeze_panes(1, 0)
-    ws.write_row(0, 0, COLUNAS, f_cab)
+    ws.write_row(0, 0, COLUNAS + extras, f_cab)
     hoje_dt = dt.datetime(hoje.year, hoje.month, hoje.day)
     cols = ["Marketplace", "SKU", "Id anúncio", "Data", "Categoria", "Sub Categoria", "Type", "Valor completo", "Datatype", "Marketplace venda"]
     if "Datatype" not in df.columns:
         df = df.assign(Datatype="Actual")
     if "Marketplace venda" not in df.columns:
         df = df.assign(**{"Marketplace venda": cliente["nome"]})
-    for i, (mk, sku, anuncio, data, cat, sub, tipo, valor, datatype, nome) in enumerate(df[cols].itertuples(index=False, name=None), 1):
+    n0 = len(COLUNAS)
+    for i, linha in enumerate(df[cols + extras].itertuples(index=False, name=None), 1):
+        mk, sku, anuncio, data, cat, sub, tipo, valor, datatype, nome = linha[:10]
         d, c2 = desc.get(sku, ("X", "X"))
         if hasattr(data, "to_pydatetime"):
             data = data.to_pydatetime()
@@ -1153,6 +1197,25 @@ def _gravar(df, cliente, desc, destino, hoje):
         ws.write_row(i, 8, [tipo, d, c2, datatype])
         ws.write_datetime(i, 12, hoje_dt, f_data)
         ws.write_string(i, 13, "Coluna Ponto")
+        for j, v in enumerate(linha[10:]):     # vínculo forçado (cliente sem SKU): colunas extras
+            if isinstance(v, float):
+                if v == v:
+                    ws.write_number(i, n0 + j, v)
+            elif v not in (None, ""):
+                ws.write_string(i, n0 + j, str(v))
+    if auditoria is not None and len(auditoria):
+        wa = wb.add_worksheet("Auditoria de vínculo")
+        f_pct = wb.add_format({"num_format": "0.0%"})
+        cols_a = list(auditoria.columns)
+        wa.write_row(0, 0, cols_a, f_cab)
+        for j, larg in enumerate((12, 22, 18, 24, 14, 9, 9)):
+            wa.set_column(j, j, larg)
+        for i, vals in enumerate(auditoria.itertuples(index=False, name=None), 1):
+            for j, v in enumerate(vals):
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    wa.write_number(i, j, float(v), f_pct if cols_a[j] == "%" else f_num)
+                else:
+                    wa.write_string(i, j, str(v))
     wb.close()
     os.replace(tmp, destino)
 

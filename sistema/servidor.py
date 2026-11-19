@@ -235,6 +235,8 @@ def salvar_cliente(dados):
             c = {"id": comum.gerar_id(nome, {x["id"] for x in cfg["clientes"]})}
             cfg["clientes"].append(c)
         c.update({"nome": nome, "ativo": bool(dados.get("ativo", True)), "contas": novas})
+        if "sem_sku" in dados:
+            c["sem_sku"] = bool(dados.get("sem_sku"))
         c.setdefault("imposto", float(cfg.get("tratamento", {}).get("imposto_padrao", 0.14)))
         comum.criar_pastas_base(cfg)
         comum.criar_pastas_cliente(cfg, c)

@@ -492,7 +492,8 @@ input[type=file]::file-selector-button:hover{border-color:var(--pri);color:var(-
     <input type="hidden" id="f-id">
     <div class="grid2">
       <div><label>Nome do cliente (grupo)<br><input type="text" id="f-nome"></label></div>
-      <div style="align-self:end"><label class="chk"><input type="checkbox" id="f-ativo" checked> Cliente ativo (entra na rotina diária)</label></div>
+      <div style="align-self:end"><label class="chk"><input type="checkbox" id="f-ativo" checked> Cliente ativo (entra na rotina diária)</label>
+        <label class="chk" title="O cliente não cadastra SKU nas plataformas: no pacote final todo ADS, afiliado, visita e clique é ligado a um produto vendido da conta (cascata ID → de-para → SKU texto → variação → título → campanha → rateio pelo faturamento), com a aba Auditoria de vínculo"><input type="checkbox" id="f-semsku"> Cliente sem SKU (vínculo forçado no pacote)</label></div>
     </div>
     <div id="f-contas"></div>
     <button class="b" id="bt-add-conta">+ Adicionar conta (outra loja)</button>
@@ -841,6 +842,8 @@ function bdPacote(cli,mes,CS,M){const J=JSON.stringify,mr=M.find(m=>m.chave===me
     const [t,cor]={ok:[r&&r.pronto?"Pacote pronto":"Conferido","var(--st-ok)"],dif:["Diferença","var(--st-war)"],erro:["Erro","var(--st-err)"],nao:["Não gerado",null]}[e];
     const R=(r&&r.resumo)||{},fat=Object.values(R).reduce((s,x)=>s+(x.faturamento||0),0),semc=Object.values(R).reduce((s,x)=>s+(x.sem_custo||0),0);
     const ch=[];if(r&&r.ok){if(semc)ch.push(`<span class="chipx w" title="${esc(Object.entries(R).filter(([,x])=>x.sem_custo).map(([m,x])=>m+": "+x.sem_custo).join(" · "))}">${semc} venda(s) sem custo</span>`);
+      if(r.vinculo&&Object.keys(r.vinculo).length){const tt=Object.entries(r.vinculo).map(([mk,m])=>{const tot=Object.values(m).reduce((a,b)=>a+b,0),forc=Object.entries(m).filter(([k])=>k.startsWith("N")).reduce((a,[,b])=>a+b,0);return `${mk}: ${tot?Math.round(forc/tot*100):0}% por vínculo forçado (` +Object.entries(m).filter(([k])=>k.startsWith("N")).map(([k,v])=>`${k.split(" ")[0]} ${tot?Math.round(v/tot*100):0}%`).join(", ")+")"}).join(" · ");
+        ch.push(`<span class="chipx o" title="${esc(tt)} — detalhe na aba Auditoria de vínculo do pacote">vínculo forçado: 0 sem produto</span>`)}
       if(r.sem_descricao)ch.push(`<span class="chipx n" title="${esc((r.exemplos_sem_descricao||[]).join(", "))}">${r.sem_descricao} SKU(s) sem descrição</span>`);
       if((r.faltando||[]).length)ch.push(`<span class="chipx e" title="${esc(r.faltando.join(", "))}">${r.faltando.length} tratado(s) faltando</span>`);
       if(r.parcial)ch.push('<span class="chipx n" title="Falta a pasta do dia 1 do mês seguinte">mês parcial</span>');
@@ -1913,7 +1916,7 @@ function rClientes(){
   $("#bd-cli").innerHTML=L.map(c=>{const cts=c.contas||[],inat=c.ativo===false;
     const rows=cts.map(ct=>`<tr><td><b>${esc(ct.nome)}</b>${ct.ativo===false?'<span class="tag">inativa</span>':""}</td>
         <td><div class="mkchips">${(ct.marketplaces||[]).map(m=>`<span class="mkchip"><i style="background:${corMk(mks[m]?.nome||m)}"></i>${esc(mks[m]?.nome||m)}</span>`).join("")||'<span class="mut">—</span>'}</div></td></tr>`).join("");
-    return `<div class="grp" style="--gc:${corGrupo(c.id)}${inat?";opacity:.7":""}"><div class="grp-h" style="cursor:default"><span class="nm">${esc(c.nome)}</span><span class="ct">${cts.length} conta(s) · ${new Set(cts.flatMap(x=>x.marketplaces||[])).size} marketplace(s)</span>${inat?'<span class="chipx n">inativo</span>':'<span class="chipx o">ativo</span>'}
+    return `<div class="grp" style="--gc:${corGrupo(c.id)}${inat?";opacity:.7":""}"><div class="grp-h" style="cursor:default"><span class="nm">${esc(c.nome)}</span>${c.sem_sku?'<span class="tag" title="Vínculo forçado no pacote final">sem SKU</span>':""}<span class="ct">${cts.length} conta(s) · ${new Set(cts.flatMap(x=>x.marketplaces||[])).size} marketplace(s)</span>${inat?'<span class="chipx n">inativo</span>':'<span class="chipx o">ativo</span>'}
       <div class="dir"><button class="bs" onclick='editar(${J(c.id)})'>Editar</button>${menu([mi("Custos e imposto",`selCliente(${J(c.id)});irPara("custos")`),mi("Ver no painel",`selCliente(${J(c.id)});irPara("status")`),"-",mi("Remover cliente",`remover(${J(c.id)})`,"dan")])}</div></div>
       <div class="tw"><table class="bd" style="min-width:600px"><colgroup><col style="width:28%"><col></colgroup><thead><tr><th>Conta</th><th>Marketplaces</th></tr></thead><tbody>${rows}</tbody></table></div></div>`}).join("");
 }
@@ -1927,8 +1930,8 @@ function blocoConta(ct){const n=++_nct;ct=ct||{};
     <div style="margin-top:8px"><label class="chk"><input type="checkbox" class="ct-ativo" ${ct.ativo===false?"":"checked"}> Conta ativa</label></div>`;
   d.querySelector('[data-acao="remover-conta"]').onclick=()=>{if(document.querySelectorAll("#f-contas > .card").length<=1)return toast("O cliente precisa de pelo menos uma conta");d.remove()};
   $("#f-contas").appendChild(d)}
-function limpar(){$("#f-id").value="";$("#f-nome").value="";$("#f-ativo").checked=true;$("#f-contas").innerHTML="";blocoConta();$("#tit-form").textContent="Novo cliente"}
-window.editar=id=>{const c=E.config.clientes.find(x=>x.id===id);$("#f-id").value=c.id;$("#f-nome").value=c.nome;$("#f-ativo").checked=c.ativo!==false;
+function limpar(){$("#f-id").value="";$("#f-nome").value="";$("#f-ativo").checked=true;$("#f-semsku").checked=false;$("#f-contas").innerHTML="";blocoConta();$("#tit-form").textContent="Novo cliente"}
+window.editar=id=>{const c=E.config.clientes.find(x=>x.id===id);$("#f-id").value=c.id;$("#f-nome").value=c.nome;$("#f-ativo").checked=c.ativo!==false;$("#f-semsku").checked=!!c.sem_sku;
   $("#f-contas").innerHTML="";(c.contas||[]).forEach(blocoConta);$("#tit-form").textContent="Editar: "+c.nome;$("#msg-cli").innerHTML="";window.scrollTo(0,0)}
 window.remover=async id=>{const c=E.config.clientes.find(x=>x.id===id);if(!confirm(`Remover ${c.nome} (e todas as contas dele) do cadastro?\n\nAs pastas e arquivos NÃO serão apagados.`))return;
   const r=await post("/api/cliente/remover",{id});msg("#msg-cli",r.ok,esc(r.aviso||r.erro));carregar()}
@@ -1941,7 +1944,7 @@ $("#bt-salvar").onclick=async()=>{
   const contas=[...document.querySelectorAll("#f-contas > .card")].map(d=>({id:d.dataset.id||null,nome:d.querySelector(".ct-nome").value,
     ativo:d.querySelector(".ct-ativo").checked,marketplaces:[...d.querySelectorAll(".ct-mk:checked")].map(x=>x.value)}));
   if(contas.some(c=>!c.marketplaces.length)&&!confirm("Há conta sem marketplace marcado. Salvar mesmo assim?"))return;
-  const r=await post("/api/cliente",{id:$("#f-id").value||null,nome:$("#f-nome").value,ativo:$("#f-ativo").checked,contas});
+  const r=await post("/api/cliente",{id:$("#f-id").value||null,nome:$("#f-nome").value,ativo:$("#f-ativo").checked,sem_sku:$("#f-semsku").checked,contas});
   if(r.ok){msg("#msg-cli",true,`Cliente salvo.${r.aviso?"<br>"+esc(r.aviso):""}<br>Próximo passo: <b>Custos e imposto</b> do cliente e, todo dia, <b>Vendas</b> &gt; Subir relatório.`);limpar()}
   else msg("#msg-cli",false,esc(r.erro));carregar()};
 function rCustos(){
